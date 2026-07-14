@@ -1,8 +1,10 @@
 # Grabix Pro
 
+**Download: <https://grabix-pro.vercel.app>**
+
 A desktop video downloader for Windows, built with Tauri 2, React 19 and Rust. It wraps `yt-dlp` and `ffmpeg` in a guided four-step interface, and ships with a companion browser extension that sends videos from your browser straight to the app.
 
-Repository: <https://github.com/engrsyedzain/Grabix-Pro-Desktop>
+Website: <https://grabix-pro.vercel.app> · Repository: <https://github.com/engrsyedzain/Grabix-Pro-Desktop>
 
 ---
 
@@ -66,6 +68,14 @@ dist_extension/          Packaged .zip (Chrome/Edge) and .xpi (Firefox)
 Progress and the final output path are read from `yt-dlp`'s documented `--progress-template` and `--print after_move:filepath` interfaces rather than by scraping its human-readable log, so an engine update can't break progress reporting.
 
 **Message flow from the browser:** extension → `grabix-native-host` (4-byte length-prefixed JSON on stdin) → launches or signals `grabix-pro.exe` with a `--payload` argument → the app emits a `silent-download-request` event that the frontend queues like any other download.
+
+---
+
+## Download
+
+Grab the installer and the browser extension packages from **<https://grabix-pro.vercel.app>**. The installer bundles `yt-dlp`, `ffmpeg` and `ffprobe`, so there is nothing else to install.
+
+If you want to build it yourself instead, see [Getting started](#getting-started) below.
 
 ---
 
