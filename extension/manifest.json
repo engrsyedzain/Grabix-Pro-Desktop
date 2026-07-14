@@ -1,0 +1,83 @@
+{
+  "manifest_version": 3,
+  "name": "GrabixPro Downloader",
+  "version": "1.0.0",
+  "description": "One-click media downloads powered by GrabixPro. Adds a download button on YouTube, Vimeo, and other supported video platforms.",
+  "permissions": [
+    "nativeMessaging",
+    "activeTab",
+    "notifications",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://m.youtube.com/*",
+    "https://vimeo.com/*",
+    "https://www.dailymotion.com/*",
+    "https://www.facebook.com/*",
+    "https://www.instagram.com/*",
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://www.twitch.tv/*",
+    "https://www.bilibili.com/*",
+    "https://www.tiktok.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://m.youtube.com/*",
+        "https://vimeo.com/*",
+        "https://www.dailymotion.com/*",
+        "https://www.facebook.com/*/videos/*",
+        "https://www.facebook.com/watch*",
+        "https://www.facebook.com/reel/*",
+        "https://www.facebook.com/reels/*",
+        "https://www.facebook.com/*/reels/*",
+        "https://www.instagram.com/reel/*",
+        "https://www.instagram.com/p/*",
+        "https://x.com/*/status/*",
+        "https://twitter.com/*/status/*",
+        "https://www.twitch.tv/videos/*",
+        "https://www.bilibili.com/video/*",
+        "https://www.tiktok.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_popup": "popup.html",
+    "default_title": "GrabixPro Downloader"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "grabixpro@grabix.pro",
+      "strict_min_version": "109.0"
+    }
+  }
+}

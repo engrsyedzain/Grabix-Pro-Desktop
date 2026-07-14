@@ -1,0 +1,46 @@
+[package]
+name = "grabix-pro"
+version = "0.1.0"
+description = "Grabix Pro"
+authors = ["you"]
+edition = "2021"
+default-run = "grabix-pro"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "grabix_pro_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "grabix-pro"
+path = "src/main.rs"
+
+[[bin]]
+name = "grabix-native-host"
+path = "src/bin/native_host.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+futures-util = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+zip = "8.6.0"
+winreg = "0.52"
+

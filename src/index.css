@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'Segoe UI', Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light;
+  
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-content: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+}
+
+@layer base {
+  body {
+    @apply bg-grabix-bg dark:bg-grabix-bg-dark text-black dark:text-grabix-white;
+  }
+
+  /* Brand-tinted text selection. */
+  ::selection {
+    @apply bg-grabix-purple/25;
+  }
+
+  /* Focus rings follow the brand instead of the UA default. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-grabix-purple/50;
+  }
+}
+
+@layer components {
+  /* Referenced across the app (main pane, settings modal, history) but never
+     defined — these panes were falling back to the default OS scrollbar. */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.grabix-border.DEFAULT') transparent;
+  }
+  .dark .custom-scrollbar {
+    scrollbar-color: theme('colors.grabix-border.dark') transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply rounded-full border-[3px] border-solid border-transparent bg-grabix-border dark:bg-grabix-border-dark;
+    background-clip: content-box;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-grabix-muted/60;
+    background-clip: content-box;
+  }
+}

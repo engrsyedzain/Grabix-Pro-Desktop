@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=360">
+  <title>GrabixPro</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="popup-brand">
+        <div class="popup-logo">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+               width="20" height="20">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="popup-title">GrabixPro</h1>
+          <p class="popup-subtitle">Media Downloader</p>
+        </div>
+      </div>
+      <div id="status-badge" class="status-badge status-checking">
+        <span class="status-dot"></span>
+        <span id="status-text">Checking...</span>
+      </div>
+    </header>
+
+    <!-- Connection Status Card -->
+    <div id="status-card" class="status-card">
+      <div class="status-card-icon" id="status-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             width="28" height="28">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      </div>
+      <div class="status-card-text">
+        <p id="status-message" class="status-message">Checking connection...</p>
+        <p id="status-detail" class="status-detail">Contacting native host</p>
+      </div>
+    </div>
+
+    <!-- Page Info -->
+    <div id="page-info" class="page-info hidden">
+      <div class="page-info-label">Current Page</div>
+      <div id="page-title" class="page-title"></div>
+      <div id="page-url" class="page-url"></div>
+    </div>
+
+    <!-- Download Options -->
+    <div class="download-options">
+      <div class="input-group">
+        <label for="resolution-select">Quality & Format</label>
+        <select id="resolution-select" class="custom-select">
+          <optgroup label="MP4 + AAC (Recommended)">
+            <option value="2160__aac">4K (2160p) — AAC</option>
+            <option value="1440__aac">2K (1440p) — AAC</option>
+            <option value="1080__aac">1080p — AAC</option>
+            <option value="720__aac" selected>720p — AAC</option>
+          </optgroup>
+          <optgroup label="MP4 + Opus (Fast)">
+            <option value="2160__opus">4K (2160p) — Opus</option>
+            <option value="1440__opus">2K (1440p) — Opus</option>
+            <option value="1080__opus">1080p — Opus</option>
+            <option value="720__opus">720p — Opus</option>
+          </optgroup>
+          <optgroup label="Audio Only">
+            <option value="audio_mp3">Audio — MP3 (320k)</option>
+            <option value="audio_aac">Audio — AAC (M4A)</option>
+          </optgroup>
+        </select>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="popup-actions">
+      <button id="download-btn" class="download-btn" disabled title="Silent background download">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+             width="16" height="16">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span id="download-btn-text">Download</span>
+      </button>
+
+      <button id="send-btn" class="secondary-btn" disabled title="Open in GrabixPro for more options">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             width="16" height="16">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          <polyline points="15 3 21 3 21 9"/>
+          <line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+        <span>Send to Grabix</span>
+      </button>
+    </div>
+
+    <!-- Settings -->
+    <div class="popup-settings">
+      <div class="setting-item">
+        <div class="setting-label">
+          <span class="setting-title">Floating Button</span>
+          <span class="setting-desc">Show icon on video pages</span>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="fab-toggle" checked>
+          <span class="slider round"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <span class="popup-version" id="version-label">v1.0.0</span>
+      <a href="#" id="help-link" class="popup-help">Setup Help</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
