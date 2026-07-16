@@ -10,6 +10,10 @@
   // Prevent double-injection (SPA navigation can re-trigger)
   if (document.getElementById('grabixpro-fab')) return;
 
+  // Prefer `browser`: in Firefox only that namespace returns promises, while
+  // `chrome` is a callback-style shim. In Chrome, `browser` is undefined.
+  const browserApi = typeof browser !== 'undefined' ? browser : chrome;
+
   // ---------- Platform Detection ----------
 
   const PLATFORM_CONFIG = {
@@ -106,14 +110,16 @@
 
   let showFAB = true;
 
-  // Initial load of settings
-  chrome.storage.local.get({ showFAB: true }, (result) => {
+  // Initial load of settings. Promise style, not a callback: Firefox's browser.*
+  // only returns promises, and Chrome's chrome.* returns one when no callback is
+  // passed - so this is the form both accept.
+  browserApi.storage.local.get({ showFAB: true }).then((result) => {
     showFAB = result.showFAB;
     checkAndInject();
   });
 
   // Listen for changes
-  chrome.storage.onChanged.addListener((changes) => {
+  browserApi.storage.onChanged.addListener((changes) => {
     if (changes.showFAB) {
       showFAB = changes.showFAB.newValue;
       checkAndInject();
@@ -205,7 +211,7 @@
     const pageTitle = platform.getTitle() || document.title || '';
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = await browserApi.runtime.sendMessage({
         action: 'download',
         url: pageUrl,
         title: pageTitle.trim(),
@@ -256,28 +262,55 @@
     }
   }
 
-  // Initial check (with a small delay for SPA hydration and storage load)
-  setTimeout(checkAndInject, 1500);
-  // Second check for slow loading Reels/Videos
-  setTimeout(checkAndInject, 3500);
+  // ---------- Navigation Watching ----------
 
-  // YouTube and other SPAs: observe URL changes
-  if (platform.observeNavigation) {
+  /**
+   * Re-check as the page hydrates. Pending timers are tracked so that a burst of
+   * navigations (clicking through a playlist) replaces the previous round rather
+   * than stacking overlapping checks on top of it.
+   */
+  let pendingChecks = [];
+
+  function scheduleChecks(delays) {
+    pendingChecks.forEach(clearTimeout);
+    pendingChecks = delays.map((delay) => setTimeout(checkAndInject, delay));
+  }
+
+  /**
+   * Report SPA URL changes.
+   *
+   * This was a MutationObserver over document.body with subtree:true, which on
+   * YouTube or Facebook fires thousands of times a second during scroll and
+   * playback, every time only to compare location.href against a string. The
+   * Navigation API delivers the event itself. Where it's unavailable, a 1s poll
+   * is still orders of magnitude cheaper - patching history.pushState isn't an
+   * option, since a content script's isolated world has its own history wrapper
+   * and never sees the page's calls.
+   */
+  function watchNavigation(onChange) {
     let lastUrl = location.href;
-    const urlObserver = new MutationObserver(() => {
-      if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        // Check multiple times as the page hydrates
-        setTimeout(checkAndInject, 1000);
-        setTimeout(checkAndInject, 2500);
-        setTimeout(checkAndInject, 4000);
-      }
-    });
-    urlObserver.observe(document.body, { childList: true, subtree: true });
 
-    // Also listen for popstate (back/forward navigation)
-    window.addEventListener('popstate', () => {
-      setTimeout(checkAndInject, 1500);
-    });
+    const fire = () => {
+      if (location.href === lastUrl) return;
+      lastUrl = location.href;
+      onChange();
+    };
+
+    if (typeof navigation !== 'undefined' && typeof navigation.addEventListener === 'function') {
+      // `navigate` fires before the new URL commits, so settle on the next tick.
+      navigation.addEventListener('navigate', () => setTimeout(fire, 0));
+    } else {
+      setInterval(fire, 1000);
+    }
+
+    window.addEventListener('popstate', () => setTimeout(fire, 0));
+    window.addEventListener('hashchange', fire);
+  }
+
+  // Initial check (delayed for SPA hydration and storage load).
+  scheduleChecks([1500, 3500]);
+
+  if (platform.observeNavigation) {
+    watchNavigation(() => scheduleChecks([0, 800, 2000, 4000]));
   }
 })();

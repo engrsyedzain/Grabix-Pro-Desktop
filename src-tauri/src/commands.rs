@@ -104,12 +104,15 @@ pub fn setup_browser_extension(_app_handle: AppHandle, extension_id: Option<Stri
         chrome_registered = true;
     }
 
+    // Must stay identical to browser_specific_settings.gecko.id in
+    // extension/manifest.json: Firefox only connects an add-on to a native host
+    // that names that exact ID here. The two are a pair - change one, change both.
     let firefox_manifest = serde_json::json!({
         "name": "grabix_pro_host",
         "description": "GrabixPro Native Messaging Host",
         "path": native_host_str,
         "type": "stdio",
-        "allowed_extensions": ["grabixpro@grabix.pro"]
+        "allowed_extensions": ["grabixpro@grabix-pro.vercel.app"]
     });
     let firefox_manifest_path = exe_dir.join("grabix_pro_host_firefox.json");
     let firefox_body = serde_json::to_string_pretty(&firefox_manifest).map_err(|e| e.to_string())?;
@@ -192,6 +195,61 @@ pub fn log_error(app_handle: AppHandle, message: String) {
 /// scoped to our own children.
 #[derive(Default)]
 pub struct DownloadRegistry(pub Mutex<HashMap<String, u32>>);
+
+/// Traces the extension launch path to app_data/launch_log.txt, alongside
+/// setup_log.txt and error_log.json.
+///
+/// Worth the noise: this path fails silently and invisibly. Everything downstream
+/// of the emit lives in the frontend, whose only log is an in-app panel nobody
+/// sees when the app was launched in silent mode - a dropped download looks
+/// exactly like no download was ever requested.
+pub fn launch_log<R: tauri::Runtime>(app_handle: &tauri::AppHandle<R>, message: &str) {
+    let Ok(dir) = app_handle.path().app_data_dir() else { return };
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("launch_log.txt");
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        use std::io::Write;
+        let _ = writeln!(file, "[{}] {}", Local::now().to_rfc3339(), message);
+    }
+}
+
+/// A launch request (from the browser extension) parked until the frontend can
+/// hear it: `(event name, payload)`.
+///
+/// On a cold start the app's `setup` hook runs before the webview has loaded any
+/// JS, so an `emit` there reaches no listeners and is dropped - the extension's
+/// download silently did nothing whenever the app wasn't already running. The
+/// request waits here until the frontend calls `flush_pending_launch`.
+#[derive(Default)]
+pub struct PendingLaunch(pub Mutex<Option<(String, String)>>);
+
+/// Emit the parked launch request, if any. Called by the frontend once its event
+/// listeners are attached, which is the only moment delivery is guaranteed.
+///
+/// Takes the value, so a request is delivered exactly once and can't replay on a
+/// later call.
+#[tauri::command]
+pub fn flush_pending_launch(
+    app_handle: AppHandle,
+    state: tauri::State<'_, PendingLaunch>,
+) -> Result<(), String> {
+    let pending = state.0.lock().map_err(|e| e.to_string())?.take();
+
+    match pending {
+        Some((event, payload)) => {
+            launch_log(
+                &app_handle,
+                &format!("flush: emitting '{}' payload={}", event, payload),
+            );
+            let result = app_handle.emit(&event, &payload);
+            launch_log(&app_handle, &format!("flush: emit ok={}", result.is_ok()));
+            result.map_err(|e| e.to_string())?;
+        }
+        None => launch_log(&app_handle, "flush: nothing pending"),
+    }
+
+    Ok(())
+}
 
 impl DownloadRegistry {
     fn insert(&self, id: &str, pid: u32) {
@@ -564,14 +622,29 @@ pub async fn start_download(
         cmd.arg("--windows-filenames"); // Strip illegal characters
         cmd.arg("--restrict-filenames"); // Be even more strict to avoid Errno 22
 
+        // YouTube (and most DASH sources) serve video as thousands of small
+        // fragments. Fetched one at a time, each pays a fresh round-trip and the
+        // download is latency-bound rather than bandwidth-bound - minutes for a
+        // clip that should take seconds. 4 is yt-dlp's own suggested starting
+        // point: a solid speedup without hammering the host.
+        cmd.arg("--concurrent-fragments").arg("4");
+
         // Machine-readable progress and final path, instead of scraping yt-dlp's
         // human-readable stdout. The old parser split on whitespace looking for a
         // "%" and guessed the output path from six different English log phrases —
         // both of which the in-app yt-dlp updater could break at any time.
         // These template fields are part of yt-dlp's documented interface.
+        //
+        // --progress is required, not cosmetic: `--print` below implies --quiet,
+        // and quiet mode swallows the progress template entirely. Without this the
+        // template emits nothing, no download-progress event is ever sent, and both
+        // the activity log and the tray sit at 0% for the whole download while the
+        // file downloads perfectly. --progress forces the report even under --quiet.
+        cmd.arg("--progress");
         cmd.arg("--progress-template")
             .arg("download:GRABIXPROG\t%(progress._percent_str)s\t%(progress._speed_str)s\t%(progress._eta_str)s");
-        // A `WHEN:` prefix keeps --print from implying --simulate/--quiet.
+        // A `WHEN:` prefix keeps --print from implying --simulate. It does NOT stop
+        // it implying --quiet - hence --progress above.
         cmd.arg("--print").arg("after_move:GRABIXPATH\t%(filepath)s");
 
         // Add headers to avoid some site blocks (especially Facebook/Instagram)
