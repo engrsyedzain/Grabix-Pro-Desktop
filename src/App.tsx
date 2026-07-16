@@ -112,6 +112,7 @@ function App() {
     dlSubtitles: false,
     showThumbnail: true,
     autoOpenFolder: true,
+    desktopNotifications: true,
     concurrentDownloads: 1,
     defaultResolution: 'custom',
     history: [],
@@ -370,10 +371,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-    
     // Auto-register extension on startup to ensure native host is linked
     const autoRegister = async () => {
        try {
@@ -431,9 +428,6 @@ function App() {
       if (payload.status === 'finished') {
         setIsDownloading(false);
         addLog(`[Success] Download finished: ${payload.title || 'Media'}`);
-        if ("Notification" in window && Notification.permission === "granted") {
-          new Notification("GrabixPro", { body: `Download complete: ${payload.title || 'Media'}` });
-        }
       }
     });
 
@@ -875,10 +869,6 @@ function App() {
           completed++;
           setQueue(q => ({ ...q, done: q.done + 1 }));
           addLog(`Finished: ${videoName}`);
-
-          if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("Grabix Pro", { body: `Finished downloading: ${videoName}` });
-          }
 
           addHistory(videoEntry?.title || 'Unknown Video', videoUrl, destination, 'finished', downloadId);
         } catch (error) {

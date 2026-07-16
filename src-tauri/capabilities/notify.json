@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "notify",
+  "description": "Capability for the bottom-right download notification overlay window. Scoped deliberately: this window only needs to receive notify-push events and call back into the app, so it gets core:default and nothing else - no fs, shell, dialog or process.",
+  "windows": ["notify"],
+  "permissions": ["core:default"]
+}

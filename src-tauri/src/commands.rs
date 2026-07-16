@@ -341,6 +341,8 @@ pub struct Settings {
     pub dl_subtitles: bool,
     pub show_thumbnail: bool,
     pub auto_open_folder: bool,
+    /// Show the bottom-right start/finish cards. On by default.
+    pub desktop_notifications: bool,
     pub concurrent_downloads: u32,
     pub default_resolution: String,
     pub history: Vec<HistoryEntry>,
@@ -362,6 +364,7 @@ impl Default for Settings {
             dl_subtitles: false,
             show_thumbnail: true,
             auto_open_folder: true,
+            desktop_notifications: true,
             concurrent_downloads: 1,
             default_resolution: "custom".to_string(),
             history: vec![],
@@ -590,6 +593,10 @@ pub async fn start_download(
     let prefs = load_settings(app_handle.clone()).unwrap_or_default();
     let cookies_browser = prefs.cookies_from_browser.clone();
     let limit_rate = prefs.limit_rate.clone();
+    // Read once here rather than per notification: the download is already
+    // underway by the time it finishes, and honouring a mid-download toggle
+    // would mean a start card with no matching finish card.
+    let notifications_on = prefs.desktop_notifications;
     let ytdlp_path = get_ytdlp_path(&app_handle);
     let ffmpeg_path = get_ffmpeg_path(&app_handle);
     let ffmpeg_dir = ffmpeg_path
@@ -719,6 +726,22 @@ pub async fn start_download(
     // this download.
     if let Some(pid) = child.id() {
         app_handle.state::<DownloadRegistry>().insert(&id, pid);
+    }
+
+    // Raised here rather than on the first progress tick: yt-dlp can spend
+    // several seconds resolving formats before it reports any progress, and the
+    // point of this card is to confirm the click landed.
+    let notify_title = title.clone().unwrap_or_else(|| "Video".to_string());
+    if notifications_on {
+        crate::notify::notify(
+            &app_handle,
+            crate::notify::NotifyPayload {
+                id: id.clone(),
+                kind: "started".to_string(),
+                title: notify_title.clone(),
+                path: None,
+            },
+        );
     }
 
     let stdout = child.stdout.take().ok_or("Failed to capture yt-dlp stdout")?;
@@ -897,6 +920,18 @@ pub async fn start_download(
             }
         };
 
+        if notifications_on {
+            crate::notify::notify(
+                &app_handle,
+                crate::notify::NotifyPayload {
+                    id: id.clone(),
+                    kind: "error".to_string(),
+                    title: notify_title.clone(),
+                    path: None,
+                },
+            );
+        }
+
         let _ = app_handle.emit("download-progress", DownloadProgress {
             status: "error".to_string(), title: title, url: Some(url),
             progress: None, speed: None, eta: None,
@@ -906,6 +941,18 @@ pub async fn start_download(
     }
 
     let p_val = { shared_path.lock().unwrap().clone().unwrap_or_else(|| actual_save_path.clone()) };
+
+    if notifications_on {
+        crate::notify::notify(
+            &app_handle,
+            crate::notify::NotifyPayload {
+                id: id.clone(),
+                kind: "finished".to_string(),
+                title: notify_title.clone(),
+                path: Some(p_val.clone()),
+            },
+        );
+    }
 
     let _ = app_handle.emit("download-progress", DownloadProgress {
         status: "finished".to_string(), title: title, url: Some(url),

@@ -52,6 +52,8 @@ export interface Settings {
   dlSubtitles: boolean;
   showThumbnail: boolean;
   autoOpenFolder: boolean;
+  /** Show the bottom-right start/finish notification cards. On by default. */
+  desktopNotifications: boolean;
   concurrentDownloads: number;
   defaultResolution: string;
   history: HistoryEntry[];

@@ -19,6 +19,7 @@ import {
   Terminal,
   Mail,
   MessageCircle,
+  Bell,
 } from "lucide-react";
 
 const CONTACT_EMAIL = "engr.syedzain@gmail.com";
@@ -413,6 +414,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     label="Auto-Open Folder"
                     value={settings.autoOpenFolder}
                     onToggle={() => updateSetting("autoOpenFolder", !settings.autoOpenFolder)}
+                  />
+                  <ToggleRow
+                    icon={Bell}
+                    label="Desktop Notifications"
+                    value={settings.desktopNotifications}
+                    onToggle={() =>
+                      updateSetting("desktopNotifications", !settings.desktopNotifications)
+                    }
                   />
                 </div>
               </section>

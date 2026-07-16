@@ -1,7 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
-    "./index.html",
+    "./*.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: 'class',
@@ -12,9 +12,17 @@ export default {
           '0%': { transform: 'translateX(-100%)' },
           '100%': { transform: 'translateX(300%)' },
         },
+        // Slide-in for the desktop notification cards. Defined here rather than
+        // reached for from `tailwindcss-animate` (animate-in / slide-in-from-*),
+        // which this project does not have installed.
+        'notify-in': {
+          '0%': { transform: 'translateX(110%)', opacity: '0' },
+          '100%': { transform: 'translateX(0)', opacity: '1' },
+        },
       },
       animation: {
         'progress-indeterminate': 'progress-indeterminate 1.5s infinite linear',
+        'notify-in': 'notify-in 220ms cubic-bezier(0.16, 1, 0.3, 1)',
       },
       colors: {
         // Brand: electric blue, matched to the app icon and the Android client.

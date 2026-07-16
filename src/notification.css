@@ -1,0 +1,19 @@
+/* Overrides for the transparent notification overlay window.
+ *
+ * Loaded after index.css, which is written for the main app window: there, body
+ * owns the page background and stretches to fill the viewport. In this window
+ * both are wrong. The window is transparent and sized to its content, so an
+ * opaque body paints exactly what the user sees as a white, sharp-cornered box
+ * behind the rounded cards, and `min-height: 100vh` stretches it to whatever
+ * height the window currently has.
+ *
+ * Only the cards should paint. Everything behind them is the desktop.
+ */
+html,
+body,
+#root {
+  background: transparent;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+}

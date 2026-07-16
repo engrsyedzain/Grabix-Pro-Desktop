@@ -1,5 +1,6 @@
 mod deps;
 mod commands;
+mod notify;
 
 use tauri::{Emitter, Listener, Manager, Runtime};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -47,6 +48,9 @@ pub fn run() {
             app.manage(commands::DownloadRegistry::default());
             // Holds a cold-start launch request until the frontend can receive it.
             app.manage(commands::PendingLaunch::default());
+            // Queues desktop notifications raised before the overlay window's JS
+            // has attached its listener.
+            app.manage(notify::NotifyState::default());
 
             let last_progress = std::sync::Arc::new(std::sync::Mutex::new(-1.0));
             let handle_clone = handle.clone();
@@ -200,7 +204,10 @@ pub fn run() {
             commands::update_ytdlp,
             commands::get_app_version,
             commands::cancel_download,
-            commands::flush_pending_launch
+            commands::flush_pending_launch,
+            notify::notify_ready,
+            notify::notify_resize,
+            notify::notify_open_location
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

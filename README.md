@@ -29,7 +29,7 @@ Website: <https://grabix-pro.vercel.app> · Repository: <https://github.com/engr
 - **System tray** — closing the window hides the app to the tray so downloads keep running. The tray tooltip and menu show live progress, and the finished entry opens the file's folder.
 - **History** — the last 100 downloads, with open-folder, copy-URL, retry, remove and clear-all actions.
 - **Activity log** — a live side panel of analysis, progress and error lines.
-- **Desktop notifications** on completion.
+- **Desktop notifications** — a colour-coded card slides into the bottom-right corner when a download starts and again when it finishes or fails, whether or not the main window is open. Clicking the completion card reveals the file in Explorer. They are drawn in a dedicated always-on-top window rather than as native Windows toasts, which the OS styles and will not let an app colour; the trade-off is that they do not appear in the Action Center.
 - **Light and dark themes.**
 - **Bundled engine, self-updating** — `yt-dlp`, `ffmpeg` and `ffprobe` ship with the installer and are copied into the app data directory on first run. `yt-dlp` can be updated in place from the About tab, and a newer bundled copy upgrades an older installed one on launch (never downgrading a copy the in-app updater has pushed ahead).
 - **Durable settings** — `settings.json` is written atomically and every field carries a default, so a new setting or an interrupted write can't cost you your history. An unreadable file is backed up rather than overwritten.
@@ -54,11 +54,13 @@ A Manifest V3 extension for Chrome, Edge, Brave and Firefox that talks to the ap
 ```
 src/                     React 19 + TypeScript + Tailwind frontend
   App.tsx                Step flow, download queue, concurrency limiter, event listeners
+  notification.tsx       Entry point for the notification overlay window
   components/            Step screens, settings modal, history, activity sidebar, trim control
   hooks/                 Theme and toast providers
 src-tauri/
   src/lib.rs             Tauri setup, tray icon/menu, launch-argument and payload handling
   src/commands.rs        analyze_url, start_download, cancel/stop, settings, extension setup
+  src/notify.rs          Bottom-right notification overlay window (position, sizing, queue)
   src/deps.rs            Bundles/repairs yt-dlp, ffmpeg and ffprobe in the app data dir
   src/bin/native_host.rs Standalone Native Messaging bridge (grabix-native-host)
   binaries/              yt-dlp, ffmpeg, ffprobe sidecars (Windows x86_64)
