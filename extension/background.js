@@ -106,19 +106,13 @@ async function sendDownloadRequest(url, title = '', resolution = '720p', mode = 
     const response = await sendToNativeHost({ url, title, resolution, mode });
 
     if (response?.status === 'ok') {
-      const isSilent = mode === 'silent';
-      const notificationTitle = isSilent ? 'GrabixPro Background' : 'GrabixPro Active';
-      const notificationMessage = isSilent
-        ? `Added to queue: ${title || url.substring(0, 50)}...`
-        : `Sent for analysis: ${title || url.substring(0, 50)}...`;
-
-      browserApi.notifications.create({
-        type: 'basic',
-        iconUrl: 'icons/icon128.png',
-        title: notificationTitle,
-        message: notificationMessage,
-        priority: 1
-      });
+      // No notification on success: the app raises its own "Download started"
+      // card the moment it accepts the request, so a browser toast here fired at
+      // the same instant and said the same thing twice.
+      //
+      // The error paths below stay: they report the app being missing or the
+      // page being unsupported, and in both cases the app is not running to
+      // raise a card of its own. Removing them would make those failures silent.
       return { success: true, response };
     } else {
       throw new Error(response?.message || 'Unknown error from native host');

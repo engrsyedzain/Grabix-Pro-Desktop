@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GrabixPro Downloader",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "One-click media downloads powered by GrabixPro. Adds a download button on YouTube, Vimeo, and other supported video platforms.",
   "permissions": [
     "nativeMessaging",

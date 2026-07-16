@@ -20,7 +20,7 @@
 ; add-on hash and the version, so it changes with every signed release - update
 ; this one line, and ISCC will fail loudly here if the file is missing rather
 ; than quietly shipping an installer without it.
-#define SignedXpi      "32b069fdf77d4a03bf62-1.0.2.xpi"
+#define SignedXpi      "32b069fdf77d4a03bf62-1.0.3.xpi"
 
 ; Version follows the exe metadata, which Tauri stamps from tauri.conf.json,
 ; so the installer can't drift from the app. Override with ISCC /DAppVersion=x.y.z
