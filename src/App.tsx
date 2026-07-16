@@ -88,6 +88,8 @@ function App() {
   const concurrencyRef = useRef(1);
 
   const runDownloadRef = useRef<((args: DownloadArgs) => Promise<void>) | undefined>(undefined);
+  // Highest 10% step already written to the activity log, per download URL.
+  const loggedProgressStep = useRef<Record<string, number>>({});
 
   const runDownload = async (args: DownloadArgs) => {
     while (inFlight.current >= concurrencyRef.current) {
@@ -409,11 +411,21 @@ function App() {
         addHistory(payload.title || 'Video', payload.url || '', payload.path, payload.status);
       }
 
+      // One line per 10% crossed, not one per tick that happens to land on a
+      // multiple of ten. yt-dlp reports several times a second, so `percent % 10`
+      // logged "10%" again for 10.2, 10.4, 10.7... and buried the log in repeats.
       if (payload.status === 'downloading' && payload.progress !== undefined) {
-        const percent = Math.floor(payload.progress);
-        if (percent % 10 === 0) { 
-           addLog(`[Progress] ${payload.title || 'Video'}: ${percent}%`);
+        const key = payload.url || '';
+        const step = Math.floor(payload.progress / 10) * 10;
+        if (step > 0 && loggedProgressStep.current[key] !== step) {
+          loggedProgressStep.current[key] = step;
+          addLog(`[Progress] ${payload.title || 'Video'}: ${step}%`);
         }
+      }
+
+      // Let the same download report again if it is retried.
+      if (payload.status === 'finished' || payload.status === 'error') {
+        delete loggedProgressStep.current[payload.url || ''];
       }
 
       if (payload.status === 'finished') {
@@ -561,6 +573,11 @@ function App() {
            addLog(`Silent download finished: ${payload.title || payload.url}`);
         }).catch(e => {
            addLog(`Silent download failed: ${e}`);
+           // Also persist it: a silent download is started from the browser with the
+           // window hidden, so addLog alone writes the reason into an activity panel
+           // nobody is looking at. The download then just "doesn't work", with no
+           // trace left anywhere to explain why.
+           invoke('log_error', { message: `Silent download failed for ${payload.url}: ${e}` }).catch(() => {});
            // Update status to error in history
            setSettings(prev => ({
              ...prev,
@@ -569,6 +586,7 @@ function App() {
         });
       } catch (e) {
         addLog(`Failed to process download payload: ${e}`);
+        invoke('log_error', { message: `Failed to process download payload: ${e}` }).catch(() => {});
       }
     });
 
@@ -595,6 +613,15 @@ function App() {
         return [...prev, key];
       });
     });
+
+    // A launch request from the browser extension (`--payload`) is parked in Rust
+    // when the app starts cold, because `setup` runs before any of this file has
+    // loaded and an emit then would reach no listeners. Ask for it only once the
+    // listeners above are genuinely attached — `listen` is async, so awaiting the
+    // promises is what makes this safe rather than a shorter race.
+    Promise.all([unlistenDownloadUrl, unlistenSilentDownload])
+      .then(() => invoke('flush_pending_launch'))
+      .catch(e => addLog(`Failed to collect launch request: ${e}`));
 
     return () => {
       unlistenProgress.then(f => f());

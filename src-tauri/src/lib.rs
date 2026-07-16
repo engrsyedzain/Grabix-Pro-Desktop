@@ -45,6 +45,8 @@ pub fn run() {
             // Tracks the pids of yt-dlp processes we spawn, so downloads can be
             // cancelled individually instead of by a machine-wide taskkill.
             app.manage(commands::DownloadRegistry::default());
+            // Holds a cold-start launch request until the frontend can receive it.
+            app.manage(commands::PendingLaunch::default());
 
             let last_progress = std::sync::Arc::new(std::sync::Mutex::new(-1.0));
             let handle_clone = handle.clone();
@@ -103,19 +105,23 @@ pub fn run() {
                 let state = handle_for_progress.state::<TrayState>();
                 if let Ok(payload) = serde_json::from_str::<commands::DownloadProgress>(event.payload()) {
                     let progress = payload.progress.unwrap_or(0.0);
-                    
+                    // Step in whole 10% increments (0, 10, 20 ...) rather than by
+                    // drift since the last update, which produced arbitrary values
+                    // like 7% -> 17% -> 26% and rewrote the tray constantly.
+                    let step = (progress / 10.0).floor() * 10.0;
+
                     {
                         let mut lp = last_progress.lock().unwrap();
-                        // Throttle updates: only update if progress changed by >= 2% or status changed
-                        if (progress - *lp).abs() < 2.0 && payload.status == "downloading" {
+                        // Only redraw when a new 10% step is crossed, or on a status change.
+                        if (step - *lp).abs() < f64::EPSILON && payload.status == "downloading" {
                             return;
                         }
-                        *lp = progress;
+                        *lp = step;
                     }
 
                     let title = payload.title.clone().unwrap_or_else(|| "Video".to_string());
                     let text = match payload.status.as_str() {
-                        "downloading" => format!("{}: {}%", title, progress as u32),
+                        "downloading" => format!("{}: {}%", title, step as u32),
                         "finished" => format!("Finished: {}", title),
                         "error" => format!("Error: {}", title),
                         _ => "Processing...".to_string(),
@@ -145,9 +151,31 @@ pub fn run() {
                 }
             });
 
-            // Handle initial launch arguments
+            // Handle initial launch arguments.
+            //
+            // Cold start only: `setup` runs before the webview's JS exists, so the
+            // frontend has not registered its listeners yet. Emitting here would
+            // broadcast to nobody and the download request would vanish - which is
+            // exactly what happened when the extension launched a closed app. Park
+            // it instead; the frontend calls `flush_pending_launch` once its
+            // listeners are attached, and only then does it get emitted.
             let args: Vec<String> = std::env::args().collect();
-            handle_args(app.handle(), args);
+            commands::launch_log(app.handle(), &format!("cold start args: {:?}", args));
+            match parse_launch(&args) {
+                Some(launch) => {
+                    commands::launch_log(
+                        app.handle(),
+                        &format!("cold start: parking '{}' payload={}", launch.event, launch.payload),
+                    );
+                    if !launch.is_silent {
+                        show_main_window(app.handle());
+                    }
+                    if let Ok(mut pending) = app.state::<commands::PendingLaunch>().0.lock() {
+                        *pending = Some((launch.event.to_string(), launch.payload));
+                    }
+                }
+                None => commands::launch_log(app.handle(), "cold start: no launch request in args"),
+            }
 
             Ok(())
         })
@@ -171,54 +199,88 @@ pub fn run() {
             commands::get_ytdlp_version,
             commands::update_ytdlp,
             commands::get_app_version,
-            commands::cancel_download
+            commands::cancel_download,
+            commands::flush_pending_launch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
-fn handle_args<R: Runtime>(app: &tauri::AppHandle<R>, args: Vec<String>) {
-    let mut payload_str = None;
+/// What a set of launch arguments asks the app to do.
+pub struct Launch {
+    pub event: &'static str,
+    pub payload: String,
+    pub is_silent: bool,
+}
 
+/// Parse the arguments the native host (or a manual launch) passed us.
+/// Pure: it decides nothing about delivery, because cold and warm starts must
+/// deliver differently. See `handle_args` and the `setup` hook.
+fn parse_launch(args: &[String]) -> Option<Launch> {
     // Reconstruct payload by joining all args after --payload
     if let Some(idx) = args.iter().position(|a| a == "--payload") {
-        let p = args[idx+1..].join(" ");
-        payload_str = Some(p);
+        let payload = args[idx + 1..].join(" ");
+        let is_silent = serde_json::from_str::<serde_json::Value>(&payload)
+            .ok()
+            .and_then(|v| {
+                v.get("mode")
+                    .and_then(|m| m.as_str())
+                    .map(|mode| mode == "silent")
+            })
+            .unwrap_or(false);
+
+        return Some(Launch {
+            event: "silent-download-request",
+            payload,
+            is_silent,
+        });
     }
 
-    let mut is_silent = false;
-    if let Some(p_str) = &payload_str {
-        if let Ok(payload_json) = serde_json::from_str::<serde_json::Value>(p_str) {
-            if let Some(mode) = payload_json.get("mode").and_then(|m| m.as_str()) {
-                if mode == "silent" {
-                    is_silent = true;
-                }
-            }
-        }
-    }
-
-    // If not silent, show the window
-    if !is_silent {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
-    }
-
-    if let Some(payload) = payload_str {
-        let _ = app.emit("silent-download-request", &payload);
+    // Fallback to old URL logic
+    let url = if let Some(sep_pos) = args.iter().position(|a| a == "--") {
+        args.get(sep_pos + 1).cloned()
     } else {
-        // Fallback to old URL logic
-        let url = if let Some(sep_pos) = args.iter().position(|a| a == "--") {
-            args.get(sep_pos + 1).cloned()
-        } else {
-            args.get(1).cloned()
-        };
+        args.get(1).cloned()
+    }?;
 
-        if let Some(url) = url {
-            if url.starts_with("http://") || url.starts_with("https://") {
-                let _ = app.emit("download-url", &url);
-            }
-        }
+    if url.starts_with("http://") || url.starts_with("https://") {
+        Some(Launch {
+            event: "download-url",
+            payload: url,
+            is_silent: false,
+        })
+    } else {
+        None
     }
+}
+
+fn show_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+/// Second-launch path (single-instance): the window and its JS are already up,
+/// so the listeners exist and emitting reaches them.
+fn handle_args<R: Runtime>(app: &tauri::AppHandle<R>, args: Vec<String>) {
+    let Some(launch) = parse_launch(&args) else {
+        commands::launch_log(app, "second instance: no launch request in args");
+        return;
+    };
+
+    if !launch.is_silent {
+        show_main_window(app);
+    }
+
+    let result = app.emit(launch.event, &launch.payload);
+    commands::launch_log(
+        app,
+        &format!(
+            "second instance: emitted '{}' ok={} payload={}",
+            launch.event,
+            result.is_ok(),
+            launch.payload
+        ),
+    );
 }

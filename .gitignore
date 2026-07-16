@@ -10,7 +10,15 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-dist_installer
+
+# Build artifacts produced into installer/ alongside its sources.
+installer/*.exe
+installer/*.zip
+installer/*.xpi
+# ...but the Mozilla-signed add-on is an input, not an output: the installer
+# ships it, and it comes back from AMO rather than from a local build. Without
+# it tracked, a fresh clone cannot produce a working setup.
+!installer/32b069fdf77d4a03bf62-*.xpi
 *.local
 
 # Editor directories and files
