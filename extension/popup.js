@@ -5,6 +5,11 @@
  * shows current tab info, and enables one-click download.
  */
 
+// Prefer `browser`: in Firefox only that namespace returns promises, and the
+// awaits below (tabs.query, executeScript, sendMessage) depend on that. In
+// Chrome, `browser` is undefined and `chrome` is already promise-based.
+const browserApi = typeof browser !== 'undefined' ? browser : chrome;
+
 document.addEventListener('DOMContentLoaded', async () => {
   const statusBadge   = document.getElementById('status-badge');
   const statusText    = document.getElementById('status-text');
@@ -25,23 +30,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ---------- Load Settings ----------
 
-  chrome.storage.local.get({ showFAB: true }, (result) => {
+  // Promise style, not a callback: the form both Firefox and Chrome accept.
+  browserApi.storage.local.get({ showFAB: true }).then((result) => {
     fabToggle.checked = result.showFAB;
   });
 
   fabToggle.addEventListener('change', () => {
-    chrome.storage.local.set({ showFAB: fabToggle.checked });
+    browserApi.storage.local.set({ showFAB: fabToggle.checked });
   });
 
   // Set version
-  const manifest = chrome.runtime.getManifest();
+  const manifest = browserApi.runtime.getManifest();
   versionLabel.textContent = `v${manifest.version}`;
 
   // Help link opens setup instructions
   helpLink.addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.tabs.create({
-      url: 'https://github.com/grabixpro/extension#setup'
+    browserApi.tabs.create({
+      url: 'https://github.com/engrsyedzain/Grabix-Pro-Desktop'
     });
     window.close();
   });
@@ -50,6 +56,31 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let currentTab = null;
   let isConnected = false;
+  // Firefox MV3 treats host_permissions as OPTIONAL: they are granted from the
+  // install prompt, so an add-on loaded via about:debugging (no prompt) - or one
+  // whose access a user revoked - has none. Without host access `tabs.query`
+  // omits `url`, so the extension cannot see which video to download.
+  // Chrome grants host_permissions at install, so this stays false there.
+  let needsHostAccess = false;
+
+  /**
+   * Ask for the host permissions the manifest already declares. Must be called
+   * from a click: Firefox only allows permissions.request() during a user gesture.
+   */
+  async function requestHostAccess() {
+    const origins = browserApi.runtime.getManifest().host_permissions || [];
+    try {
+      const granted = await browserApi.permissions.request({ origins });
+      if (granted) {
+        // Re-run the popup from the top, now that the tab URL is readable.
+        window.location.reload();
+        return;
+      }
+      statusDetail.textContent = 'Access denied. Grabix cannot read the page URL.';
+    } catch (e) {
+      statusDetail.textContent = `Could not request access: ${e.message}`;
+    }
+  }
 
   /**
    * Check if current tab has video content.
@@ -69,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Attempt to check for video tags via scripting
     try {
-      const results = await chrome.scripting.executeScript({
+      const results = await browserApi.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => document.getElementsByTagName('video').length > 0
       });
@@ -82,8 +113,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     // Get the active tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await browserApi.tabs.query({ active: true, currentWindow: true });
     currentTab = tab;
+
+    // A tab with no `url` means no host access, not a missing tab.
+    needsHostAccess = !!tab && !tab.url;
 
     // Show page info if it's a valid URL
     if (tab?.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
@@ -97,7 +131,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Check native host connection
   try {
-    const response = await chrome.runtime.sendMessage({ action: 'checkConnection' });
+    const response = await browserApi.runtime.sendMessage({ action: 'checkConnection' });
 
     if (response?.connected) {
       isConnected = true;
@@ -121,17 +155,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         ? `Native host v${response.version}`
         : 'Native host connected';
 
-      // Enable buttons if we have a valid page and video content
-      const hasVideo = await checkVideoContent(currentTab);
-      if (hasVideo) {
+      if (needsHostAccess) {
+        // Don't call this "no video detected" - it isn't. The page may well be a
+        // video; we simply aren't allowed to look. Offer the one action that helps.
+        statusText.textContent = 'Access needed';
+        statusMessage.textContent = 'Grabix needs access to this site';
+        statusDetail.textContent = 'Firefox has not granted site access yet. Click Grant access to enable downloads.';
+        downloadText.textContent = 'Grant access';
         downloadBtn.disabled = false;
-        sendBtn.disabled = false;
-      } else {
-        downloadBtn.disabled = true;
         sendBtn.disabled = true;
-        statusText.textContent = 'No video detected';
-        statusMessage.textContent = 'No video detected on page';
-        statusDetail.textContent = 'Open a video page to enable downloading';
+      } else {
+        // Enable buttons if we have a valid page and video content
+        const hasVideo = await checkVideoContent(currentTab);
+        if (hasVideo) {
+          downloadBtn.disabled = false;
+          sendBtn.disabled = false;
+        } else {
+          downloadBtn.disabled = true;
+          sendBtn.disabled = true;
+          statusText.textContent = 'No video detected';
+          statusMessage.textContent = 'No video detected on page';
+          statusDetail.textContent = 'Open a video page to enable downloading';
+        }
       }
     } else {
       setDisconnected(response?.error || 'Native host not found');
@@ -168,6 +213,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ---------- Download Button ----------
 
   downloadBtn.addEventListener('click', async () => {
+    // Doubles as the "Grant access" button when Firefox has withheld host access.
+    if (needsHostAccess) {
+      await requestHostAccess();
+      return;
+    }
     sendDownload('silent');
   });
 
@@ -176,7 +226,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   async function sendDownload(mode) {
-    if (!currentTab?.url || !isConnected) return;
+    // Say why nothing happened. This used to `return` in silence, so a popup that
+    // read "Connected" would ignore the button with no explanation anywhere.
+    if (!isConnected) {
+      statusDetail.textContent = 'Not connected to GrabixPro. Is the app running?';
+      return;
+    }
+    if (!currentTab?.url) {
+      needsHostAccess = true;
+      statusDetail.textContent = 'Grabix cannot read this page URL. Click Grant access.';
+      downloadText.textContent = 'Grant access';
+      downloadBtn.disabled = false;
+      return;
+    }
 
     const isSilent = mode === 'silent';
     
@@ -188,7 +250,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
-      const response = await chrome.runtime.sendMessage({
+      const response = await browserApi.runtime.sendMessage({
         action: 'download',
         url: currentTab.url,
         title: currentTab.title || '',

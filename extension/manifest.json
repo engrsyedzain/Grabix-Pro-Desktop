@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GrabixPro Downloader",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "One-click media downloads powered by GrabixPro. Adds a download button on YouTube, Vimeo, and other supported video platforms.",
   "permissions": [
     "nativeMessaging",
@@ -25,7 +25,7 @@
   ],
   "background": {
     "service_worker": "background.js",
-    "type": "module"
+    "scripts": ["background.js"]
   },
   "content_scripts": [
     {
@@ -76,8 +76,11 @@
   ],
   "browser_specific_settings": {
     "gecko": {
-      "id": "grabixpro@grabix.pro",
-      "strict_min_version": "109.0"
+      "id": "grabixpro@grabix-pro.vercel.app",
+      "strict_min_version": "121.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   }
 }
