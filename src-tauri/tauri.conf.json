@@ -41,8 +41,7 @@
       "binaries/yt-dlp"
     ],
     "resources": [
-      "../extension/**/*",
-      "../dist_extension/*"
+      "../extension/**/*"
     ]
   }
 }

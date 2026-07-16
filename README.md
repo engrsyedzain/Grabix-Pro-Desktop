@@ -62,7 +62,8 @@ src-tauri/
   src/bin/native_host.rs Standalone Native Messaging bridge (grabix-native-host)
   binaries/              yt-dlp, ffmpeg, ffprobe sidecars (Windows x86_64)
 extension/               Manifest V3 extension (background, content script, popup)
-dist_extension/          Packaged .zip (Chrome/Edge) and .xpi (Firefox)
+installer/               Inno Setup script + build script; setup.exe and the
+                         packaged .zip/.xpi land here too (artifacts gitignored)
 ```
 
 Progress and the final output path are read from `yt-dlp`'s documented `--progress-template` and `--print after_move:filepath` interfaces rather than by scraping its human-readable log, so an engine update can't break progress reporting.
@@ -110,7 +111,7 @@ The installer and binaries land in `src-tauri/target/release/`. `yt-dlp`, `ffmpe
 ./build_extension.ps1
 ```
 
-Produces `dist_extension/grabix_pro_extension.zip` (Chrome/Edge/Brave) and `dist_extension/grabix_pro_extension.xpi` (Firefox).
+Produces `installer/grabix_pro_extension.zip` (Chrome/Edge/Brave) and `installer/grabix_pro_extension.xpi` (Firefox). Both hold the same files — the manifest declares `background.scripts` for Firefox alongside `background.service_worker` for Chrome.
 
 ### Install the extension
 

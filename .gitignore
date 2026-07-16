@@ -10,7 +10,11 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-dist_installer
+
+# Build artifacts produced into installer/ alongside its sources.
+installer/*.exe
+installer/*.zip
+installer/*.xpi
 *.local
 
 # Editor directories and files

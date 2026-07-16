@@ -50,7 +50,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=force
 RestartApplications=no
 
-OutputDir={#SrcRoot}\dist_installer
+; Output lands next to this script. The build artifacts (*.exe, *.zip, *.xpi) are
+; gitignored, so this folder tracks only the sources that produce them.
+OutputDir=.
 OutputBaseFilename=GrabixPro_{#AppVersion}_x64_setup
 SetupIconFile={#SrcRoot}\src-tauri\icons\icon.ico
 WizardStyle=modern
@@ -76,8 +78,15 @@ Source: "{#SrcRoot}\src-tauri\binaries\ffprobe-x86_64-pc-windows-msvc.exe"; Dest
 Source: "{#SrcRoot}\src-tauri\binaries\yt-dlp-x86_64-pc-windows-msvc.exe";  DestDir: "{app}"; DestName: "yt-dlp.exe";  Flags: ignoreversion
 
 ; Browser extension, unpacked so users can load-unpacked it from chrome://extensions.
-; The zip/xpi in dist_extension are for store/Firefox distribution, not the installer.
+; The zip/xpi build_extension.ps1 emits are for store distribution, not the installer.
 Source: "{#SrcRoot}\extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Setup guide for the extension. Neither Chrome nor Firefox permits an installer to
+; add an extension for you (Chrome blocked local-CRX external installs in v33;
+; Firefox removed sideloading in v74), so the best we can do is hand the user an
+; accurate, offline, one-click walkthrough. It reads its own path at runtime to
+; print the exact extension folder.
+Source: "{#SrcRoot}\installer\extension-setup.html"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"
@@ -96,11 +105,9 @@ Type: files; Name: "{app}\grabix_pro_host_firefox.json"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\extension-setup.html"; Description: "Set up the browser extension (Chrome / Firefox)"; Flags: shellexec nowait postinstall skipifsilent
 
 [Code]
-var
-  DownloadPage: TDownloadWizardPage;
-
 { WebView2 runtime is what Tauri renders in; absent it, the window comes up blank.
   Win11 and updated Win10 ship it, so this usually finds it and downloads nothing. }
 function WebView2Installed: Boolean;
@@ -118,39 +125,41 @@ begin
   Result := True;
 end;
 
-procedure InitializeWizard;
+{ Warn only where someone is watching. Under /SILENT the messages go to the log,
+  and a MsgBox here would be auto-answered and never read. }
+procedure WarnWebView2(const Detail: String);
 begin
-  DownloadPage := CreateDownloadPage(SetupMessage(msgWizardPreparing), SetupMessage(msgPreparingDesc), @OnDownloadProgress);
+  Log('WebView2: ' + Detail);
+  if not WizardSilent then
+    MsgBox(Detail + #13#10#13#10 +
+           'Setup will continue. If Grabix Pro opens a blank window, install WebView2 from' + #13#10 +
+           'https://developer.microsoft.com/microsoft-edge/webview2/', mbInformation, MB_OK);
 end;
 
-function NextButtonClick(CurPageID: Integer): Boolean;
+{ Deliberately PrepareToInstall rather than NextButtonClick(wpReady): silent installs
+  skip every wizard page, so page-driven code never runs. This runs in both modes.
+  Never fatal - a missing runtime degrades the app, but a failed download shouldn't
+  block an install that might well find a runtime anyway. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
-  Result := True;
-  if (CurPageID = wpReady) and (not WebView2Installed) then
+  Result := '';
+  if WebView2Installed then
   begin
-    DownloadPage.Clear;
-    DownloadPage.Add('https://go.microsoft.com/fwlink/p/?LinkId=2124703', 'MicrosoftEdgeWebview2Setup.exe', '');
-    DownloadPage.Show;
-    try
-      try
-        DownloadPage.Download;
-        { Per-user runtime install, matching this installer's scope: no elevation prompt. }
-        if not Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '',
-                    SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
-          MsgBox('The WebView2 runtime could not be installed automatically.' + #13#10 +
-                 'Grabix Pro will install, but may show a blank window until you install WebView2 from' + #13#10 +
-                 'https://developer.microsoft.com/microsoft-edge/webview2/', mbInformation, MB_OK);
-      except
-        { A failed download shouldn't block the install - the app may still find a runtime. }
-        MsgBox('Could not download the WebView2 runtime:' + #13#10 + GetExceptionMessage + #13#10#13#10 +
-               'Setup will continue. If Grabix Pro opens a blank window, install WebView2 from' + #13#10 +
-               'https://developer.microsoft.com/microsoft-edge/webview2/', mbInformation, MB_OK);
-      end;
-    finally
-      DownloadPage.Hide;
-    end;
+    Log('WebView2: runtime already present, nothing to download.');
+    Exit;
+  end;
+
+  try
+    DownloadTemporaryFile('https://go.microsoft.com/fwlink/p/?LinkId=2124703',
+                          'MicrosoftEdgeWebview2Setup.exe', '', @OnDownloadProgress);
+    { Per-user runtime install, matching this installer's scope: no elevation prompt. }
+    if not Exec(ExpandConstant('{tmp}\MicrosoftEdgeWebview2Setup.exe'), '/silent /install', '',
+                SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+      WarnWebView2('The WebView2 runtime could not be installed automatically.');
+  except
+    WarnWebView2('Could not download the WebView2 runtime: ' + GetExceptionMessage);
   end;
 end;
 

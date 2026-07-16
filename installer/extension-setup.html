@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grabix Pro — Browser Extension Setup</title>
+<style>
+  :root {
+    --purple: #8b5cf6;
+    --purple-deep: #6d28d9;
+    --bg: #f6f5fb;
+    --card: #ffffff;
+    --text: #1a1a24;
+    --muted: #5c5c70;
+    --line: #e4e2ee;
+    --code-bg: #f1effa;
+    --warn-bg: #fff8e6;
+    --warn-line: #f0c96b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f0f19;
+      --card: #191926;
+      --text: #e9e9f2;
+      --muted: #a0a0b8;
+      --line: #2c2c40;
+      --code-bg: #12121c;
+      --warn-bg: #2a2413;
+      --warn-line: #6b5a24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 20px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  .logo {
+    width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 50%, #6d28d9 100%);
+    display: flex; align-items: center; justify-content: center; color: #fff;
+  }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 0 0 32px 57px; font-size: 14px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 24px 26px; margin-bottom: 20px;
+  }
+  h2 { font-size: 17px; margin: 0 0 16px; display: flex; align-items: center; gap: 9px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--purple); flex-shrink: 0; }
+  ol { margin: 0; padding-left: 22px; }
+  li { margin-bottom: 11px; }
+  li:last-child { margin-bottom: 0; }
+  code {
+    background: var(--code-bg); border: 1px solid var(--line);
+    padding: 2px 7px; border-radius: 6px;
+    font-family: 'Cascadia Code', Consolas, 'SF Mono', monospace; font-size: 13px;
+    word-break: break-all;
+  }
+  .pathrow { display: flex; gap: 8px; align-items: stretch; margin: 14px 0 2px; }
+  .pathbox {
+    flex: 1; background: var(--code-bg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 11px 13px;
+    font-family: 'Cascadia Code', Consolas, 'SF Mono', monospace; font-size: 12.5px;
+    word-break: break-all; user-select: all;
+  }
+  button {
+    background: var(--purple); color: #fff; border: 0; border-radius: 8px;
+    padding: 0 18px; font-size: 13px; font-weight: 600; cursor: pointer;
+    font-family: inherit; white-space: nowrap; transition: background 0.18s ease;
+  }
+  button:hover { background: var(--purple-deep); }
+  button.done { background: #16a34a; }
+  .note {
+    background: var(--warn-bg); border: 1px solid var(--warn-line);
+    border-radius: 10px; padding: 13px 16px; margin-top: 16px; font-size: 13.5px;
+  }
+  .note strong { display: block; margin-bottom: 3px; }
+  footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 30px; }
+  a { color: var(--purple); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round" width="22" height="22">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    </div>
+    <h1>Browser Extension Setup</h1>
+  </header>
+  <p class="sub">Grabix Pro is installed. The extension is a separate, one-time step —
+     Chrome and Firefox both require you to add it yourself.</p>
+
+  <div class="card">
+    <h2><span class="dot"></span>The extension folder</h2>
+    <p style="margin:0;color:var(--muted);font-size:14px">Both browsers below ask for this path:</p>
+    <div class="pathrow">
+      <div class="pathbox" id="path">…</div>
+      <button id="copy">Copy</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot"></span>Chrome, Edge or Brave</h2>
+    <ol>
+      <li>Open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>).</li>
+      <li>Turn on <strong>Developer mode</strong> — top-right toggle.</li>
+      <li>Click <strong>Load unpacked</strong> and select the folder above.</li>
+      <li>Copy the <strong>ID</strong> shown on the new extension's card.</li>
+      <li>In Grabix Pro, go to <strong>Settings → Browser Extension</strong>, paste the ID,
+          and click <strong>Register Host</strong>.</li>
+    </ol>
+    <div class="note">
+      <strong>Step 5 is not optional.</strong>
+      Chrome only lets the extension talk to Grabix Pro if the app registers your specific
+      extension ID. Skip it and the popup will say “Disconnected”.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot"></span>Firefox</h2>
+    <ol>
+      <li>Open <code>about:debugging#/runtime/this-firefox</code>.</li>
+      <li>Click <strong>Load Temporary Add-on…</strong>.</li>
+      <li>Select <code>manifest.json</code> <em>inside</em> the folder above.</li>
+    </ol>
+    <div class="note">
+      <strong>This lasts until you close Firefox.</strong>
+      Firefox only installs add-ons permanently once they are signed by Mozilla, and it
+      removed installer-based (“sideloaded”) add-ons in version 74. A permanent install
+      needs a signed <code>.xpi</code> — see <code>sign_extension.ps1</code> in the repo.
+      No registration step is needed here; Firefox's host is already set up.
+    </div>
+  </div>
+
+  <footer>
+    Trouble connecting? Open Grabix Pro → Settings → Browser Extension.<br>
+    <a href="https://grabix-pro.vercel.app">grabix-pro.vercel.app</a>
+  </footer>
+
+</div>
+<script>
+  // This page ships inside the install folder, so the extension path is derived from
+  // its own location rather than baked in at compile time.
+  (function () {
+    var dir = decodeURIComponent(location.pathname.replace(/^\//, '').replace(/\/[^/]*$/, ''));
+    var winPath = dir.replace(/\//g, '\\') + '\\extension';
+    var box = document.getElementById('path');
+    box.textContent = winPath;
+
+    var btn = document.getElementById('copy');
+    btn.addEventListener('click', function () {
+      navigator.clipboard.writeText(winPath).then(function () {
+        btn.textContent = 'Copied';
+        btn.classList.add('done');
+        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1800);
+      }).catch(function () {
+        // file:// clipboard can be blocked; the box is select-all so this stays usable.
+        btn.textContent = 'Select it';
+        setTimeout(function () { btn.textContent = 'Copy'; }, 1800);
+      });
+    });
+  })();
+</script>
+</body>
+</html>
