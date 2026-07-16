@@ -16,6 +16,12 @@
 #define ReleaseDir     SrcRoot + "\src-tauri\target\release"
 #define MainExe        ReleaseDir + "\grabix-pro.exe"
 
+; The Mozilla-signed add-on, as downloaded from AMO. The name carries AMO's
+; add-on hash and the version, so it changes with every signed release - update
+; this one line, and ISCC will fail loudly here if the file is missing rather
+; than quietly shipping an installer without it.
+#define SignedXpi      "32b069fdf77d4a03bf62-1.0.2.xpi"
+
 ; Version follows the exe metadata, which Tauri stamps from tauri.conf.json,
 ; so the installer can't drift from the app. Override with ISCC /DAppVersion=x.y.z
 #ifndef AppVersion
@@ -80,6 +86,13 @@ Source: "{#SrcRoot}\src-tauri\binaries\yt-dlp-x86_64-pc-windows-msvc.exe";  Dest
 ; Browser extension, unpacked so users can load-unpacked it from chrome://extensions.
 ; The zip/xpi build_extension.ps1 emits are for store distribution, not the installer.
 Source: "{#SrcRoot}\extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; The signed add-on for Firefox, which installs permanently from about:addons.
+; Renamed on the way in: AMO's filename is an add-on hash plus a version, which
+; means nothing to a user staring at a file picker. It deliberately does NOT live
+; in extension\ in the repo - that folder is the input to build_extension.ps1, so
+; an .xpi sitting there would be zipped into the next package of itself.
+Source: "{#SrcRoot}\installer\{#SignedXpi}"; DestDir: "{app}\extension"; DestName: "grabix-pro-firefox.xpi"; Flags: ignoreversion
 
 ; Setup guide for the extension. Neither Chrome nor Firefox permits an installer to
 ; add an extension for you (Chrome blocked local-CRX external installs in v33;

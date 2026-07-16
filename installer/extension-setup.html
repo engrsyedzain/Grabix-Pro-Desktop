@@ -98,11 +98,11 @@
     <h1>Browser Extension Setup</h1>
   </header>
   <p class="sub">Grabix Pro is installed. The extension is a separate, one-time step —
-     Chrome and Firefox both require you to add it yourself.</p>
+     browsers no longer let an installer add one for you.</p>
 
   <div class="card">
     <h2><span class="dot"></span>The extension folder</h2>
-    <p style="margin:0;color:var(--muted);font-size:14px">Both browsers below ask for this path:</p>
+    <p style="margin:0;color:var(--muted);font-size:14px">Chrome asks for this path:</p>
     <div class="pathrow">
       <div class="pathbox" id="path">…</div>
       <button id="copy">Copy</button>
@@ -129,16 +129,21 @@
   <div class="card">
     <h2><span class="dot"></span>Firefox</h2>
     <ol>
-      <li>Open <code>about:debugging#/runtime/this-firefox</code>.</li>
-      <li>Click <strong>Load Temporary Add-on…</strong>.</li>
-      <li>Select <code>manifest.json</code> <em>inside</em> the folder above.</li>
+      <li>Open <code>about:addons</code>.</li>
+      <li>Click the gear icon <strong>⚙</strong> near the top right → <strong>Install Add-on From File…</strong></li>
+      <li>Select this file:
+        <div class="pathrow">
+          <div class="pathbox" id="xpipath">…</div>
+          <button id="copyxpi">Copy</button>
+        </div>
+      </li>
+      <li>Click <strong>Add</strong> when Firefox asks to confirm.</li>
     </ol>
     <div class="note">
-      <strong>This lasts until you close Firefox.</strong>
-      Firefox only installs add-ons permanently once they are signed by Mozilla, and it
-      removed installer-based (“sideloaded”) add-ons in version 74. A permanent install
-      needs a signed <code>.xpi</code> — see <code>sign_extension.ps1</code> in the repo.
-      No registration step is needed here; Firefox's host is already set up.
+      <strong>Nothing else to do.</strong>
+      This add-on is signed by Mozilla, so it installs permanently and survives a
+      restart. Firefox needs no Extension ID — unlike Chrome, its connection to
+      Grabix Pro is already set up.
     </div>
   </div>
 
@@ -149,26 +154,31 @@
 
 </div>
 <script>
-  // This page ships inside the install folder, so the extension path is derived from
-  // its own location rather than baked in at compile time.
+  // This page ships inside the install folder, so the paths are derived from its own
+  // location rather than baked in at compile time.
   (function () {
     var dir = decodeURIComponent(location.pathname.replace(/^\//, '').replace(/\/[^/]*$/, ''));
-    var winPath = dir.replace(/\//g, '\\') + '\\extension';
-    var box = document.getElementById('path');
-    box.textContent = winPath;
+    var extDir = dir.replace(/\//g, '\\') + '\\extension';
+    var xpi = extDir + '\\grabix-pro-firefox.xpi';
 
-    var btn = document.getElementById('copy');
-    btn.addEventListener('click', function () {
-      navigator.clipboard.writeText(winPath).then(function () {
-        btn.textContent = 'Copied';
-        btn.classList.add('done');
-        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1800);
-      }).catch(function () {
-        // file:// clipboard can be blocked; the box is select-all so this stays usable.
-        btn.textContent = 'Select it';
-        setTimeout(function () { btn.textContent = 'Copy'; }, 1800);
+    function wire(boxId, btnId, value) {
+      document.getElementById(boxId).textContent = value;
+      var btn = document.getElementById(btnId);
+      btn.addEventListener('click', function () {
+        navigator.clipboard.writeText(value).then(function () {
+          btn.textContent = 'Copied';
+          btn.classList.add('done');
+          setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('done'); }, 1800);
+        }).catch(function () {
+          // file:// clipboard can be blocked; the box is select-all so this stays usable.
+          btn.textContent = 'Select it';
+          setTimeout(function () { btn.textContent = 'Copy'; }, 1800);
+        });
       });
-    });
+    }
+
+    wire('path', 'copy', extDir);
+    wire('xpipath', 'copyxpi', xpi);
   })();
 </script>
 </body>
