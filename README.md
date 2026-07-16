@@ -44,7 +44,8 @@ A Manifest V3 extension for Chrome, Edge, Brave and Firefox that talks to the ap
   - **Download** — silent mode: queues the download in the background without bringing the app forward.
   - **Send to Grabix** — active mode: opens the app, analyses the URL and jumps to the download step.
 - **Supported sites** — YouTube, Vimeo, Dailymotion, Facebook, Instagram, X/Twitter, Twitch, Bilibili and TikTok. (The app itself accepts any URL `yt-dlp` supports.)
-- **Native host registration** — the app registers the messaging host for Chrome, Edge and Firefox on startup; the Settings screen lets you paste an Extension ID to re-register, and documents the manual registry commands as a fallback.
+- **Signed for Firefox** — a Mozilla-signed `.xpi` ships with the installer, so Firefox installs it permanently from `about:addons`.
+- **Native host registration** — the app registers the Firefox host on startup, using the add-on's fixed ID. Chrome and Edge are registered once you paste the extension's ID into the Settings screen: their host manifest has to name the exact ID, and Chrome generates it when the extension loads.
 
 ---
 
@@ -74,7 +75,7 @@ Progress and the final output path are read from `yt-dlp`'s documented `--progre
 
 ## Download
 
-Grab the installer and the browser extension packages from **<https://grabix-pro.vercel.app>**. The installer bundles `yt-dlp`, `ffmpeg` and `ffprobe`, so there is nothing else to install.
+Grab the installer from **<https://grabix-pro.vercel.app>**. It bundles `yt-dlp`, `ffmpeg` and `ffprobe`, plus the browser extension — including the signed Firefox add-on — so there is nothing else to download.
 
 If you want to build it yourself instead, see [Getting started](#getting-started) below.
 
@@ -97,13 +98,26 @@ npm run tauri dev
 
 Vite serves the frontend on `http://localhost:1420` and Tauri opens the desktop window against it.
 
-### Build
+### Build the app
 
 ```powershell
 npm run tauri build
 ```
 
-The installer and binaries land in `src-tauri/target/release/`. `yt-dlp`, `ffmpeg` and `ffprobe` are bundled as external sidecars, and the extension packages are bundled as resources.
+Binaries land in `src-tauri/target/release/`, alongside Tauri's own NSIS and MSI bundles. `yt-dlp`, `ffmpeg` and `ffprobe` are bundled as external sidecars, and `extension/` is bundled as a resource.
+
+Use `npm run tauri build` rather than `cargo build --release` — the latter produces a binary that loads the frontend from the dev server instead of embedding it, so the app opens a blank window.
+
+### Build the installer
+
+```powershell
+./installer/build-installer.ps1            # full build, then package
+./installer/build-installer.ps1 -SkipBuild # package what is already in target/release
+```
+
+Produces `installer/GrabixPro_<version>_x64_setup.exe` with [Inno Setup](https://jrsoftware.org/isinfo.php) 6+. The version is read from the exe's metadata, which Tauri stamps from `tauri.conf.json`, so it cannot drift.
+
+The install is **per-user** (`%LOCALAPPDATA%\Programs\Grabix Pro`), and deliberately so: the app rewrites `grabix_pro_host.json` into its own directory on every launch, which a machine-wide install would deny to a standard user and break extension registration.
 
 ### Package the extension
 
@@ -113,12 +127,28 @@ The installer and binaries land in `src-tauri/target/release/`. `yt-dlp`, `ffmpe
 
 Produces `installer/grabix_pro_extension.zip` (Chrome/Edge/Brave) and `installer/grabix_pro_extension.xpi` (Firefox). Both hold the same files — the manifest declares `background.scripts` for Firefox alongside `background.service_worker` for Chrome.
 
+### Sign the Firefox add-on
+
+```powershell
+$env:AMO_JWT_ISSUER = "user:12345678:123"
+$env:AMO_JWT_SECRET = "<secret>"
+./sign_extension.ps1                  # unlisted: signed for self-distribution
+./sign_extension.ps1 -Channel listed  # submit to AMO for a public listing
+```
+
+Firefox refuses to install an unsigned add-on permanently, and it removed installer-based ("sideloaded") add-ons in version 74 — so a Mozilla-signed `.xpi` is the only way to ship one. Signing removes the unsigned block; the user still installs it by hand, once.
+
+The signed `.xpi` returned by AMO is committed under `installer/` and shipped by the installer (see the `SignedXpi` define in `installer/grabix-pro.iss`). Bump `version` in `extension/manifest.json` before re-signing: AMO permanently reserves every version it has seen, even from a failed upload.
+
 ### Install the extension
 
-1. Install and launch Grabix Pro at least once — it registers the native messaging host on startup.
-2. **Chrome/Edge/Brave:** open `chrome://extensions`, enable Developer mode, and *Load unpacked* from the `extension/` directory (or drag in the `.zip`).
-3. Copy the extension's ID, paste it into **Grabix Pro → Settings → Browser Integration**, and click **Register Host**. Chrome requires the ID in the host manifest's allowed origins; Firefox uses a fixed ID and needs no such step.
-4. The popup's badge should read **Connected**.
+Install and launch Grabix Pro at least once first — it registers the native messaging host on startup.
+
+**Firefox** — open `about:addons`, click the gear icon, choose *Install Add-on From File*, and select `grabix-pro-firefox.xpi` from the `extension` folder in the install directory. It is signed, so it installs permanently. No ID registration: the app authorises the add-on's fixed ID.
+
+**Chrome/Edge/Brave** — open `chrome://extensions`, enable Developer mode, and *Load unpacked* from the `extension` folder in the install directory. Then copy the extension's ID, paste it into **Grabix Pro → Settings → Browser Extension**, and click **Register Host**. This step is not optional: Chrome only permits a native-host connection if the host manifest names that exact ID, and the ID is generated when the extension loads.
+
+The popup's badge should then read **Connected**.
 
 ---
 
