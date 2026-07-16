@@ -168,11 +168,43 @@ fn main() {
                 #[cfg(target_os = "windows")]
                 {
                     use std::os::windows::process::CommandExt;
-                    std::process::Command::new(&exe_path)
-                        .arg("--payload")
-                        .arg(&payload_str)
-                        .creation_flags(0x00000008) // DETACHED_PROCESS
-                        .spawn()
+                    use std::process::Stdio;
+
+                    const DETACHED_PROCESS: u32 = 0x00000008;
+                    const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x01000000;
+
+                    // Breaking away from the job object is what makes this work at
+                    // all under Firefox.
+                    //
+                    // Firefox runs native messaging hosts inside a Windows Job
+                    // Object that terminates every process in it when the job
+                    // closes - and that happens the moment this host exits, a few
+                    // milliseconds from now. A child inherits the job, so the app
+                    // was created and then killed before running a single line:
+                    // spawn() returned Ok, the log said "launched successfully",
+                    // and nothing whatsoever happened. Chrome does not impose the
+                    // same limit, which is why Chrome worked and Firefox did not.
+                    //
+                    // stdio is nulled deliberately too: the default is to inherit,
+                    // which would hand the app Firefox's messaging pipes and leave
+                    // them open for as long as it runs.
+                    let spawn_with = |flags: u32| {
+                        std::process::Command::new(&exe_path)
+                            .arg("--payload")
+                            .arg(&payload_str)
+                            .stdin(Stdio::null())
+                            .stdout(Stdio::null())
+                            .stderr(Stdio::null())
+                            .creation_flags(flags)
+                            .spawn()
+                    };
+
+                    // A job that forbids breakaway rejects the flag outright, so
+                    // fall back rather than refusing to launch at all.
+                    spawn_with(DETACHED_PROCESS | CREATE_BREAKAWAY_FROM_JOB).or_else(|e| {
+                        debug_log(&format!("Breakaway spawn failed ({e}); retrying without it."));
+                        spawn_with(DETACHED_PROCESS)
+                    })
                 }
                 #[cfg(not(target_os = "windows"))]
                 {
