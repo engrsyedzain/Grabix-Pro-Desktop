@@ -72,11 +72,29 @@ export default function NotificationStack() {
   const wrapper = useRef<HTMLDivElement>(null);
   const timers = useRef<Record<string, number>>({});
 
+  // Downloads whose card the user has closed by hand.
+  //
+  // Closing a card is a request to be left alone about that download, not a
+  // request to stop it - the download carries on in the background. Without
+  // this the next progress tick simply put the card back a fraction of a second
+  // later, because a tick and the card it updates are the same message, so
+  // dismissing one was indistinguishable from never having seen it.
+  const muted = useRef<Set<string>>(new Set());
+
   const dismiss = useCallback((id: string) => {
     window.clearTimeout(timers.current[id]);
     delete timers.current[id];
     setItems(prev => prev.filter(i => i.id !== id));
   }, []);
+
+  /// Dismissal the user asked for, as opposed to a card timing out on its own.
+  const close = useCallback(
+    (id: string) => {
+      muted.current.add(id);
+      dismiss(id);
+    },
+    [dismiss],
+  );
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -85,6 +103,19 @@ export default function NotificationStack() {
     (async () => {
       const stop = await listen<NotifyPayload>('notify-push', event => {
         const payload = event.payload;
+
+        if (payload.kind === 'started') {
+          // A progress tick for a card the user closed. Drop it: the download
+          // keeps running, it just stops asking for attention.
+          if (muted.current.has(payload.id)) return;
+        } else {
+          // Finished or failed. The download is over, so no tick can revive
+          // this id, and the outcome is worth one card even to someone who
+          // closed the progress one - it is brief, and on success it is the
+          // button that opens the file. Forgetting the id here also keeps the
+          // set from growing across a long session.
+          muted.current.delete(payload.id);
+        }
 
         setItems(prev => {
           const next = prev.filter(i => i.id !== payload.id);
@@ -188,7 +219,7 @@ export default function NotificationStack() {
               <button
                 onClick={e => {
                   e.stopPropagation();
-                  dismiss(item.id);
+                  close(item.id);
                 }}
                 aria-label="Dismiss"
                 className="shrink-0 rounded-lg p-1 text-white/60 transition-colors hover:bg-white/20 hover:text-white"
