@@ -152,18 +152,12 @@ pub fn run() {
                 }
             });
 
-            let handle_for_engine = handle_for_menu.clone();
+            // Nothing is shipped with the app: yt-dlp, ffmpeg and ffprobe are all
+            // fetched here if missing, and yt-dlp is re-checked against GitHub on
+            // every launch. Runs on its own task so a slow or unreachable network
+            // never delays the window.
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = deps::check_and_download_deps(handle_for_menu).await {
-                    eprintln!("Failed to setup dependencies: {}", e);
-                }
-            });
-
-            // yt-dlp is not shipped with the app: fetch it if it is missing, and
-            // check GitHub for a newer release on every launch. Runs on its own
-            // task so a slow or unreachable network never delays the window.
-            tauri::async_runtime::spawn(async move {
-                engine::ensure_engine(handle_for_engine).await;
+                engine::ensure_engine(handle_for_menu).await;
             });
 
             // Handle initial launch arguments.

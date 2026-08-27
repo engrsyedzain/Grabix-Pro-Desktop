@@ -38,10 +38,6 @@
     "publisher": "Syed Zain",
     "homepage": "https://syed-zain.com",
     "copyright": "Copyright (c) Syed Zain",
-    "externalBin": [
-      "binaries/ffmpeg",
-      "binaries/ffprobe"
-    ],
     "resources": [
       "../extension/**/*"
     ]

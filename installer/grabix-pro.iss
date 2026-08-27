@@ -58,7 +58,7 @@ DisableProgramGroupPage=yes
 UninstallDisplayName={#AppName}
 UninstallDisplayIcon={app}\{#AppExeName}
 
-; The sidecars are x86_64 builds.
+; The app and the binaries it fetches are x86_64.
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
@@ -87,12 +87,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#MainExe}"; DestDir: "{app}"; DestName: "{#AppExeName}"; Flags: ignoreversion
 Source: "{#ReleaseDir}\grabix-native-host.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; FFmpeg sidecars, sourced from the checked-in binaries dir and stripped of the
-; target triple. deps.rs finds them by prefix next to the exe and copies them
-; into app data. yt-dlp is deliberately not among them - see below.
-Source: "{#SrcRoot}\src-tauri\binaries\ffmpeg-x86_64-pc-windows-msvc.exe";  DestDir: "{app}"; DestName: "ffmpeg.exe";  Flags: ignoreversion
-Source: "{#SrcRoot}\src-tauri\binaries\ffprobe-x86_64-pc-windows-msvc.exe"; DestDir: "{app}"; DestName: "ffprobe.exe"; Flags: ignoreversion
-
+; ffmpeg and ffprobe are deliberately absent. They are ~175 MB of executable
+; that dominated this installer, and unlike yt-dlp they never go stale - so the
+; app fetches them on first launch instead (src-tauri/src/engine.rs), as a 28 MB
+; archive rather than the 92 MB one the same release also publishes.
+;
 ; yt-dlp, downloaded to {tmp} by PrepareToInstall below rather than carried in
 ; the installer. "external" means Inno reads it off disk at install time;
 ; "skipifsourcedoesntexist" is what makes a failed download non-fatal - the app

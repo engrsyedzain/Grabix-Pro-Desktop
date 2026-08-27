@@ -5,6 +5,8 @@ import { AlertTriangle, CheckCircle2, Cpu, RefreshCw, X } from 'lucide-react';
 
 /** Mirrors `EngineStatus` in src-tauri/src/engine.rs. */
 export interface EngineStatus {
+  /** "engine" = yt-dlp, "media" = ffmpeg/ffprobe. */
+  component: 'engine' | 'media';
   phase: 'idle' | 'checking' | 'downloading' | 'installing' | 'ready' | 'error';
   message: string;
   progress: number | null;
@@ -18,14 +20,14 @@ export interface EngineStatus {
 const CONFIRM_MS = 6000;
 
 /**
- * Locks the app while yt-dlp is being fetched or updated.
+ * Locks the app while yt-dlp, ffmpeg or ffprobe are being fetched.
  *
- * The engine is not shipped with the app (see engine.rs): it is downloaded by
- * the installer and re-checked against GitHub on every launch. Neither of those
- * is a background nicety - running a download against a stale engine is the most
- * common way this app fails - so when there is work to do the UI is covered and
- * the user is told what is happening rather than left to discover it as a
- * cryptic yt-dlp error twenty minutes later.
+ * None of the three ship with the app (see engine.rs) - together they are the
+ * bulk of what an installer would carry, and yt-dlp goes stale within weeks.
+ * Fetching them is not a background nicety: without ffmpeg nothing merges, and
+ * running a download against a stale engine is the most common way this app
+ * fails. So when there is work to do the UI is covered and the user is told what
+ * is happening, rather than left to discover it as a cryptic error later.
  *
  * The overlay is driven entirely by `status.blocking`. An engine that is merely
  * unreachable (offline launch, working copy on disk) is never blocking.
@@ -98,13 +100,18 @@ export default function EngineGate() {
 
   const failed = status.phase === 'error';
   const percent = status.progress;
+  const media = status.component === 'media';
   const heading = failed
-    ? 'The download engine is missing'
-    : status.phase === 'checking'
-      ? 'Checking the download engine'
-      : status.version
-        ? 'Updating the download engine'
-        : 'Setting up the download engine';
+    ? media
+      ? 'FFmpeg could not be set up'
+      : 'The download engine is missing'
+    : media
+      ? 'Setting up FFmpeg'
+      : status.phase === 'checking'
+        ? 'Checking the download engine'
+        : status.version
+          ? 'Updating the download engine'
+          : 'Setting up the download engine';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
@@ -123,6 +130,16 @@ export default function EngineGate() {
             'Grabix Pro keeps yt-dlp current so downloads keep working when sites change.'}
         </p>
 
+        {/* Said once, on the only screen where the wait needs explaining: this
+            is the one-off cost of an installer that isn't carrying 175 MB of
+            FFmpeg around. It never happens again on this machine. */}
+        {media && !failed && (
+          <p className="mt-2 text-[11px] leading-relaxed text-grabix-dim">
+            A one-time download. FFmpeg merges and converts what you grab, and
+            once it is here Grabix Pro never fetches it again.
+          </p>
+        )}
+
         {!failed && (
           <>
             <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-grabix-surface dark:bg-grabix-input-dark">
@@ -140,7 +157,7 @@ export default function EngineGate() {
             </div>
             <p className="mt-2 text-[10px] font-mono text-grabix-dim">
               {percent === null ? 'Working...' : `${Math.round(percent)}%`}
-              {status.latest ? ` - yt-dlp ${status.latest}` : ''}
+              {!media && status.latest ? ` - yt-dlp ${status.latest}` : ''}
             </p>
           </>
         )}

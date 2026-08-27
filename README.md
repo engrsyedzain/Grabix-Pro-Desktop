@@ -31,7 +31,7 @@ Website: <https://syed-zain.com> · Repository: <https://github.com/engrsyedzain
 - **Activity log** — a live side panel of analysis, progress and error lines.
 - **Desktop notifications** — a colour-coded card slides into the bottom-right corner when a download starts and again when it finishes or fails, whether or not the main window is open. Clicking the completion card reveals the file in Explorer. They are drawn in a dedicated always-on-top window rather than as native Windows toasts, which the OS styles and will not let an app colour; the trade-off is that they do not appear in the Action Center.
 - **Light and dark themes.**
-- **Always-current engine** — `yt-dlp` is never shipped frozen. The installer downloads the newest release from GitHub, and every launch checks for a newer one; when there is one, the app locks the interface behind a progress overlay while it downloads, then carries on. `ffmpeg` and `ffprobe` still ship as sidecars and are copied into the app data directory on first run.
+- **Nothing bundled, everything current** — none of the three engines ship with the app. The installer fetches `yt-dlp` from GitHub, and every launch checks for a newer release; `ffmpeg` and `ffprobe` are fetched once on first launch. Either way the app locks the interface behind a progress overlay while it works, then carries on. Between them these are ~190 MB of executable, so leaving them out takes the installer from 68.9 MB to 5.7 MB.
 - **Durable settings** — `settings.json` is written atomically and every field carries a default, so a new setting or an interrupted write can't cost you your history. An unreadable file is backed up rather than overwritten.
 - **Single instance** — a second launch (for example from the extension) is routed into the running window.
 
@@ -61,10 +61,9 @@ src-tauri/
   src/lib.rs             Tauri setup, tray icon/menu, launch-argument and payload handling
   src/commands.rs        analyze_url, start_download, cancel/stop, settings, extension setup
   src/notify.rs          Bottom-right notification overlay window (position, sizing, queue)
-  src/deps.rs            Copies the ffmpeg/ffprobe sidecars into the app data dir
-  src/engine.rs          Downloads yt-dlp and keeps it current on every launch
+  src/deps.rs            Where yt-dlp, ffmpeg and ffprobe live in the app data dir
+  src/engine.rs          Fetches all three, and keeps yt-dlp current every launch
   src/bin/native_host.rs Standalone Native Messaging bridge (grabix-native-host)
-  binaries/              ffmpeg, ffprobe sidecars (Windows x86_64)
 extension/               Manifest V3 extension (background, content script, popup)
 installer/               Inno Setup script + build script; setup.exe and the
                          packaged .zip/.xpi land here too (artifacts gitignored)
@@ -78,7 +77,7 @@ Progress and the final output path are read from `yt-dlp`'s documented `--progre
 
 ## Download
 
-Grab the installer from **<https://syed-zain.com>**. It bundles `ffmpeg` and `ffprobe`, plus the browser extension — including the signed Firefox add-on. `yt-dlp` is fetched from GitHub during setup so you start on the current release rather than whatever was current when the installer was built; if that download fails, the app retrieves it on first launch.
+Grab the installer from **<https://syed-zain.com>**. At 5.7 MB it carries the app and the browser extension — including the signed Firefox add-on — and nothing else. `yt-dlp` is fetched from GitHub during setup, so you start on the current release rather than whatever was current when the installer was built; if that download fails the app retrieves it on first launch. `ffmpeg` and `ffprobe` arrive on first launch as a single 28 MB download, once per machine.
 
 If you want to build it yourself instead, see [Getting started](#getting-started) below.
 
@@ -90,7 +89,7 @@ If you want to build it yourself instead, see [Getting started](#getting-started
 
 - Node.js 18+
 - Rust (stable) and the [Tauri 2 prerequisites](https://tauri.app/start/prerequisites/)
-- Windows (the sidecar binaries and native-host registration are Windows-targeted; the Rust code carries macOS/Linux branches but is not built or tested there)
+- Windows (the fetched binaries and native-host registration are Windows-targeted; the Rust code carries macOS/Linux branches but is not built or tested there)
 
 ### Development
 
@@ -107,7 +106,7 @@ Vite serves the frontend on `http://localhost:1420` and Tauri opens the desktop 
 npm run tauri build
 ```
 
-Binaries land in `src-tauri/target/release/`, alongside Tauri's own NSIS and MSI bundles. `ffmpeg` and `ffprobe` are bundled as external sidecars and `extension/` as a resource; `yt-dlp` is downloaded at install time instead.
+Binaries land in `src-tauri/target/release/`, alongside Tauri's own NSIS and MSI bundles. Only `extension/` is bundled, as a resource - `yt-dlp` is downloaded at install time and `ffmpeg`/`ffprobe` on first launch.
 
 Use `npm run tauri build` rather than `cargo build --release` — the latter produces a binary that loads the frontend from the dev server instead of embedding it, so the app opens a blank window.
 

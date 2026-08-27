@@ -447,6 +447,10 @@ pub fn check_path_exists(path: String) -> bool {
 const ENGINE_MISSING: &str =
     "The download engine is still being set up. Open Grabix Pro, wait for setup to finish, then try again.";
 
+/// Same, for the half of the toolkit that merges and remuxes.
+const MEDIA_MISSING: &str =
+    "FFmpeg is still being set up. Open Grabix Pro, wait for setup to finish, then try again.";
+
 #[tauri::command]
 pub async fn analyze_url(app_handle: AppHandle, url: String) -> Result<serde_json::Value, String> {
     let ytdlp_path = get_ytdlp_path(&app_handle);
@@ -614,6 +618,9 @@ pub async fn start_download(
         return Err(ENGINE_MISSING.to_string());
     }
     let ffmpeg_path = get_ffmpeg_path(&app_handle);
+    if !ffmpeg_path.exists() {
+        return Err(MEDIA_MISSING.to_string());
+    }
     let ffmpeg_dir = ffmpeg_path
         .parent()
         .and_then(|p| p.to_str())
