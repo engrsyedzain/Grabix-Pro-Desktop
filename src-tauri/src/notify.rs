@@ -25,35 +25,70 @@ const WIDTH: f64 = 380.0;
 /// Gap between the card stack and the corner of the work area, in logical pixels.
 const MARGIN: f64 = 12.0;
 
+/// One card. Everything the notification window draws travels as one of these,
+/// on one event.
+///
+/// Progress ticks deliberately reuse this rather than riding a second, smaller
+/// event of their own. The saving from a leaner tick payload is measured in
+/// bytes; the cost was a second delivery path that could fail on its own, which
+/// is exactly what happened - start and finish cards arrived while every tick
+/// vanished silently. One payload on one channel means a tick cannot break
+/// without the cards breaking too, and that is a failure nobody can miss.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotifyPayload {
-    /// The download id. Reused across started -> finished so the frontend can
-    /// replace the card in place instead of stacking two for one download.
+    /// The download id. Reused across started -> tick -> finished so the frontend
+    /// can replace the card in place instead of stacking several for one download.
     pub id: String,
     /// "started" | "finished" | "error"
     pub kind: String,
     pub title: String,
     /// Set on "finished": the file to reveal when the card is clicked.
     pub path: Option<String>,
-}
-
-/// A progress tick for a card that is already on screen.
-///
-/// Deliberately a separate, smaller event from [`NotifyPayload`]: these arrive
-/// once per whole percent for the length of a download, and re-sending the title
-/// and kind with each one would be pure waste.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NotifyProgress {
-    /// The download id, matching the card raised by [`notify`].
-    pub id: String,
-    /// 0-100, or `None` when yt-dlp reports an unknown percentage.
+    /// 0-100 on a progress tick, `None` on the lifecycle events and whenever
+    /// yt-dlp reports an unknown percentage.
+    #[serde(default)]
     pub progress: Option<f64>,
     /// yt-dlp's own speed string, e.g. "3.21MiB/s".
+    #[serde(default)]
     pub speed: Option<String>,
     /// yt-dlp's own ETA string, e.g. "00:42".
+    #[serde(default)]
     pub eta: Option<String>,
+}
+
+impl NotifyPayload {
+    /// A lifecycle card: started, finished or failed.
+    pub fn card(id: String, kind: &str, title: String, path: Option<String>) -> Self {
+        Self {
+            id,
+            kind: kind.to_string(),
+            title,
+            path,
+            progress: None,
+            speed: None,
+            eta: None,
+        }
+    }
+
+    /// A progress tick for a download already on screen.
+    pub fn tick(
+        id: String,
+        title: String,
+        progress: Option<f64>,
+        speed: Option<String>,
+        eta: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            kind: "started".to_string(),
+            title,
+            path: None,
+            progress,
+            speed,
+            eta,
+        }
+    }
 }
 
 /// Queues notifications raised before the notification webview has attached its
@@ -114,41 +149,71 @@ fn reposition<R: Runtime>(win: &tauri::WebviewWindow<R>) -> tauri::Result<()> {
     win.set_position(PhysicalPosition::new(x, y))
 }
 
-/// Raise a notification. Safe to call from any thread; never fails the caller.
-pub fn notify<R: Runtime>(app: &AppHandle<R>, payload: NotifyPayload) {
-    if let Err(e) = ensure_window(app) {
-        eprintln!("notify: could not create the notification window: {e}");
-        return;
-    }
+/// Note a delivery problem where someone will find it.
+///
+/// These used to be `let _ = app.emit_to(..)`. Swallowing the result meant a
+/// notification that never arrived left no trace anywhere, which turned a
+/// one-line bug into a hunt through two languages. Nothing here is fatal - a
+/// missed card must never take a download down with it - but it is recorded.
+fn log_notify<R: Runtime>(app: &AppHandle<R>, message: &str) {
+    eprintln!("notify: {message}");
 
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let stamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("notify_log.txt"))
+    {
+        use std::io::Write;
+        let _ = writeln!(file, "[{stamp}] {message}");
+    }
+}
+
+/// Send one payload to the notification window.
+///
+/// `queue_when_early` decides what happens before the webview has attached its
+/// listener: lifecycle cards are held and flushed by [`notify_ready`], while
+/// progress ticks are dropped. Queueing a tick would replay a stale percentage
+/// seconds after the fact, and there is always another tick coming.
+fn push<R: Runtime>(app: &AppHandle<R>, payload: NotifyPayload, queue_when_early: bool) {
     // `inner()` rather than using the `State` guard directly: a lock taken
     // through the guard borrows the local, which cannot outlive this function.
     let state = app.state::<NotifyState>();
     let state: &NotifyState = state.inner();
 
     if state.ready.load(Ordering::SeqCst) {
-        let _ = app.emit_to(LABEL, "notify-push", payload);
+        if let Err(e) = app.emit_to(LABEL, "notify-push", payload) {
+            log_notify(app, &format!("emit failed: {e}"));
+        }
         return;
     }
 
-    if let Ok(mut queue) = state.queue.lock() {
-        queue.push(payload);
+    if queue_when_early {
+        if let Ok(mut queue) = state.queue.lock() {
+            queue.push(payload);
+        }
     }
 }
 
-/// Push a progress tick to a card that is already on screen.
-///
-/// Unlike [`notify`], this never queues and never creates the window. A tick is
-/// only meaningful next to the card it belongs to, and that card was raised
-/// through `notify` - so if the webview is not listening yet, the right thing to
-/// do with a tick is drop it and send the next one.
-pub fn notify_progress<R: Runtime>(app: &AppHandle<R>, payload: NotifyProgress) {
-    let state = app.state::<NotifyState>();
-    let state: &NotifyState = state.inner();
-
-    if state.ready.load(Ordering::SeqCst) {
-        let _ = app.emit_to(LABEL, "notify-progress", payload);
+/// Raise or replace a card. Safe to call from any thread; never fails the caller.
+pub fn notify<R: Runtime>(app: &AppHandle<R>, payload: NotifyPayload) {
+    if let Err(e) = ensure_window(app) {
+        log_notify(app, &format!("could not create the notification window: {e}"));
+        return;
     }
+
+    push(app, payload, true);
+}
+
+/// Update a card that is already on screen with a progress tick.
+///
+/// Does not create the window: a tick is only meaningful beside the card it
+/// belongs to, and that card was raised through [`notify`].
+pub fn notify_progress<R: Runtime>(app: &AppHandle<R>, payload: NotifyPayload) {
+    push(app, payload, false);
 }
 
 /// Called by the notification webview once its listener is attached.
@@ -164,7 +229,9 @@ pub fn notify_ready<R: Runtime>(app: AppHandle<R>) {
     };
 
     for payload in pending {
-        let _ = app.emit_to(LABEL, "notify-push", payload);
+        if let Err(e) = app.emit_to(LABEL, "notify-push", payload) {
+            log_notify(&app, &format!("flush failed: {e}"));
+        }
     }
 }
 

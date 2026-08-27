@@ -750,12 +750,7 @@ pub async fn start_download(
     if notifications_on {
         crate::notify::notify(
             &app_handle,
-            crate::notify::NotifyPayload {
-                id: id.clone(),
-                kind: "started".to_string(),
-                title: notify_title.clone(),
-                path: None,
-            },
+            crate::notify::NotifyPayload::card(id.clone(), "started", notify_title.clone(), None),
         );
     }
 
@@ -789,6 +784,7 @@ pub async fn start_download(
 
     let app_handle_stdout = app_handle.clone();
     let id_inner = id.clone();
+    let notify_title_inner = notify_title.clone();
     tokio::spawn(async move {
         // Whole percent last pushed to the notification card. yt-dlp reports many
         // times per second; the card only ever shows an integer, so anything
@@ -828,12 +824,13 @@ pub async fn start_download(
                         last_card_percent = percent;
                         crate::notify::notify_progress(
                             &app_handle_stdout,
-                            crate::notify::NotifyProgress {
-                                id: id_inner.clone(),
+                            crate::notify::NotifyPayload::tick(
+                                id_inner.clone(),
+                                notify_title_inner.clone(),
                                 progress,
-                                speed: speed.clone(),
-                                eta: eta.clone(),
-                            },
+                                speed.clone(),
+                                eta.clone(),
+                            ),
                         );
                     }
                 }
@@ -962,12 +959,7 @@ pub async fn start_download(
         if notifications_on {
             crate::notify::notify(
                 &app_handle,
-                crate::notify::NotifyPayload {
-                    id: id.clone(),
-                    kind: "error".to_string(),
-                    title: notify_title.clone(),
-                    path: None,
-                },
+                crate::notify::NotifyPayload::card(id.clone(), "error", notify_title.clone(), None),
             );
         }
 
@@ -984,12 +976,12 @@ pub async fn start_download(
     if notifications_on {
         crate::notify::notify(
             &app_handle,
-            crate::notify::NotifyPayload {
-                id: id.clone(),
-                kind: "finished".to_string(),
-                title: notify_title.clone(),
-                path: Some(p_val.clone()),
-            },
+            crate::notify::NotifyPayload::card(
+                id.clone(),
+                "finished",
+                notify_title.clone(),
+                Some(p_val.clone()),
+            ),
         );
     }
 

@@ -5,27 +5,18 @@ import { CheckCircle2, Download, AlertTriangle, X } from 'lucide-react';
 
 type NotifyKind = 'started' | 'finished' | 'error';
 
+/** Mirrors `NotifyPayload` in src-tauri/src/notify.rs. Progress ticks are the
+ *  same shape as the cards, arriving on the same event - see the note there on
+ *  why this is one channel and not two. */
 interface NotifyPayload {
   id: string;
   kind: NotifyKind;
   title: string;
   path?: string | null;
-}
-
-/** Mirrors `NotifyProgress` in src-tauri/src/notify.rs. */
-interface NotifyProgressPayload {
-  id: string;
   progress?: number | null;
   speed?: string | null;
   eta?: string | null;
 }
-
-/** A card plus whatever progress has arrived for it since. */
-type NotifyItem = NotifyPayload & {
-  progress?: number | null;
-  speed?: string | null;
-  eta?: string | null;
-};
 
 /** How long each kind stays on screen. "started" is informational, so it goes
  *  quickly; the other two are outcomes worth reading, and "finished" is also a
@@ -43,6 +34,14 @@ const DISMISS_MS: Record<NotifyKind, number> = {
  *  card forever if yt-dlp died without a finish or error event - each tick
  *  refreshes this window, so the card outlives the download and no more. */
 const PROGRESS_KEEPALIVE_MS = 20000;
+
+/** How long a card stays up, given what just arrived for it. */
+function dismissDelay(payload: NotifyPayload): number {
+  if (payload.kind === 'started' && typeof payload.progress === 'number') {
+    return PROGRESS_KEEPALIVE_MS;
+  }
+  return DISMISS_MS[payload.kind] ?? 6000;
+}
 
 const STYLES: Record<
   NotifyKind,
@@ -69,7 +68,7 @@ const STYLES: Record<
 };
 
 export default function NotificationStack() {
-  const [items, setItems] = useState<NotifyItem[]>([]);
+  const [items, setItems] = useState<NotifyPayload[]>([]);
   const wrapper = useRef<HTMLDivElement>(null);
   const timers = useRef<Record<string, number>>({});
 
@@ -89,53 +88,25 @@ export default function NotificationStack() {
 
         setItems(prev => {
           const next = prev.filter(i => i.id !== payload.id);
-          // Replace rather than append: a download that finishes while its
-          // "started" card is still on screen should flip that card over, not
-          // stack a second one for the same download.
+          // Replace rather than append, for both halves of the job: a progress
+          // tick updates the card in place, and a download that finishes while
+          // its "started" card is still on screen flips that card over instead
+          // of stacking a second one for the same download.
           return [...next, payload];
         });
 
         window.clearTimeout(timers.current[payload.id]);
         timers.current[payload.id] = window.setTimeout(
           () => dismiss(payload.id),
-          DISMISS_MS[payload.kind] ?? 6000,
-        );
-      });
-
-      const stopProgress = await listen<NotifyProgressPayload>('notify-progress', event => {
-        const tick = event.payload;
-
-        setItems(prev => {
-          // Ticks are fire-and-forget on the Rust side, so one can arrive for a
-          // card that has already been dismissed or replaced by its outcome.
-          // Merging only into a live "started" card keeps those from resurrecting
-          // a finished download as a downloading one.
-          const target = prev.find(i => i.id === tick.id);
-          if (!target || target.kind !== 'started') return prev;
-
-          return prev.map(i =>
-            i.id === tick.id
-              ? { ...i, progress: tick.progress, speed: tick.speed, eta: tick.eta }
-              : i,
-          );
-        });
-
-        window.clearTimeout(timers.current[tick.id]);
-        timers.current[tick.id] = window.setTimeout(
-          () => dismiss(tick.id),
-          PROGRESS_KEEPALIVE_MS,
+          dismissDelay(payload),
         );
       });
 
       if (cancelled) {
         stop();
-        stopProgress();
         return;
       }
-      unlisten = () => {
-        stop();
-        stopProgress();
-      };
+      unlisten = stop;
 
       // Only now is it safe for Rust to emit. Anything raised before this point
       // is queued on the Rust side and flushed by this call.
@@ -169,7 +140,7 @@ export default function NotificationStack() {
     return () => observer.disconnect();
   }, [items]);
 
-  const open = (item: NotifyItem) => {
+  const open = (item: NotifyPayload) => {
     if (item.kind !== 'finished' || !item.path) return;
     invoke('notify_open_location', { path: item.path }).catch(() => {});
     dismiss(item.id);
