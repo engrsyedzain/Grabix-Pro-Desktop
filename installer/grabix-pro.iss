@@ -9,9 +9,18 @@
 ;   "C:\Program Files\Inno Setup 7\ISCC.exe" installer\grabix-pro.iss
 
 #define AppName        "Grabix Pro"
-#define AppPublisher   "Grabix"
-#define AppUrl         "https://grabix-pro.vercel.app"
+#define AppPublisher   "Syed Zain"
+#define AppUrl         "https://syed-zain.com"
+#define AppContact     "me@syed-zain.com"
 #define AppExeName     "GrabixPro.exe"
+
+; yt-dlp is fetched at install time rather than shipped. The engine breaks
+; whenever a site changes its player, so a copy frozen at build time is stale
+; before the installer is even signed. This "latest" URL redirects to the newest
+; release asset, so it never needs updating here. The app re-checks on every
+; launch (src-tauri/src/engine.rs) and fetches it itself if this download fails,
+; which is why nothing below treats a failure as fatal.
+#define YtDlpUrl       "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
 #define SrcRoot        ".."
 #define ReleaseDir     SrcRoot + "\src-tauri\target\release"
 #define MainExe        ReleaseDir + "\grabix-pro.exe"
@@ -38,6 +47,7 @@ AppPublisher={#AppPublisher}
 AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}
 AppUpdatesURL={#AppUrl}
+AppContact={#AppContact}
 
 ; Per-user install: no elevation, and {app} stays writable at runtime.
 PrivilegesRequired=lowest
@@ -77,11 +87,17 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#MainExe}"; DestDir: "{app}"; DestName: "{#AppExeName}"; Flags: ignoreversion
 Source: "{#ReleaseDir}\grabix-native-host.exe"; DestDir: "{app}"; Flags: ignoreversion
 
-; Sidecars, sourced from the checked-in binaries dir and stripped of the target
-; triple. deps.rs finds them by prefix next to the exe and copies them into app data.
+; FFmpeg sidecars, sourced from the checked-in binaries dir and stripped of the
+; target triple. deps.rs finds them by prefix next to the exe and copies them
+; into app data. yt-dlp is deliberately not among them - see below.
 Source: "{#SrcRoot}\src-tauri\binaries\ffmpeg-x86_64-pc-windows-msvc.exe";  DestDir: "{app}"; DestName: "ffmpeg.exe";  Flags: ignoreversion
 Source: "{#SrcRoot}\src-tauri\binaries\ffprobe-x86_64-pc-windows-msvc.exe"; DestDir: "{app}"; DestName: "ffprobe.exe"; Flags: ignoreversion
-Source: "{#SrcRoot}\src-tauri\binaries\yt-dlp-x86_64-pc-windows-msvc.exe";  DestDir: "{app}"; DestName: "yt-dlp.exe";  Flags: ignoreversion
+
+; yt-dlp, downloaded to {tmp} by PrepareToInstall below rather than carried in
+; the installer. "external" means Inno reads it off disk at install time;
+; "skipifsourcedoesntexist" is what makes a failed download non-fatal - the app
+; then fetches the engine itself on first launch.
+Source: "{tmp}\yt-dlp.exe"; DestDir: "{app}"; Flags: external ignoreversion skipifsourcedoesntexist
 
 ; Browser extension, unpacked so users can load-unpacked it from chrome://extensions.
 ; The zip/xpi build_extension.ps1 emits are for store distribution, not the installer.
@@ -135,11 +151,27 @@ end;
 
 function OnDownloadProgress(const Url, FileName: String; const Progress, ProgressMax: Int64): Boolean;
 begin
+  { Downloads happen on the "Preparing to Install" page, which has no progress
+    bar of its own, so report through its status label instead of leaving the
+    wizard looking hung on a slow connection. }
+  if (ProgressMax > 0) and not WizardSilent then
+    WizardForm.StatusLabel.Caption :=
+      FileName + ' - ' + IntToStr((Progress * 100) div ProgressMax) + '%';
   Result := True;
 end;
 
 { Warn only where someone is watching. Under /SILENT the messages go to the log,
   and a MsgBox here would be auto-answered and never read. }
+procedure WarnYtDlp(const Detail: String);
+begin
+  Log('yt-dlp: ' + Detail);
+  if not WizardSilent then
+    MsgBox(Detail + #13#10#13#10 +
+           'Setup will continue. Grabix Pro will download the engine itself the' + #13#10 +
+           'first time you open it, so make sure you are online then.',
+           mbInformation, MB_OK);
+end;
+
 procedure WarnWebView2(const Detail: String);
 begin
   Log('WebView2: ' + Detail);
@@ -158,6 +190,19 @@ var
   ResultCode: Integer;
 begin
   Result := '';
+
+  { The current yt-dlp, straight from GitHub. Best-effort by design: the [Files]
+    entry is skipped when this leaves nothing in the temp directory, and the app
+    fetches the engine itself on first launch. Never block an install over it. }
+  if not WizardSilent then
+    WizardForm.StatusLabel.Caption := 'Downloading the yt-dlp download engine...';
+  try
+    DownloadTemporaryFile('{#YtDlpUrl}', 'yt-dlp.exe', '', @OnDownloadProgress);
+    Log('yt-dlp: downloaded the latest release.');
+  except
+    WarnYtDlp('Could not download the yt-dlp engine: ' + GetExceptionMessage);
+  end;
+
   if WebView2Installed then
   begin
     Log('WebView2: runtime already present, nothing to download.');

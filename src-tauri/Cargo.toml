@@ -1,8 +1,9 @@
 [package]
 name = "grabix-pro"
-version = "0.1.0"
+version = "0.2.0"
 description = "Grabix Pro"
-authors = ["you"]
+authors = ["Syed Zain <me@syed-zain.com>"]
+homepage = "https://syed-zain.com"
 edition = "2021"
 default-run = "grabix-pro"
 
@@ -36,7 +37,9 @@ tauri-plugin-process = "2"
 tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+# "stream" backs the yt-dlp download in engine.rs, which reports progress
+# as it goes rather than buffering ~18 MB and then writing it in one go.
+reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
 futures-util = "0.3"

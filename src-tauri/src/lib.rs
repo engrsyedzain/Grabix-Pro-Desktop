@@ -1,5 +1,6 @@
 mod deps;
 mod commands;
+mod engine;
 mod notify;
 
 use tauri::{Emitter, Listener, Manager, Runtime};
@@ -51,6 +52,8 @@ pub fn run() {
             // Queues desktop notifications raised before the overlay window's JS
             // has attached its listener.
             app.manage(notify::NotifyState::default());
+            // Last yt-dlp provisioning status, read by the frontend on mount.
+            app.manage(engine::EngineState::default());
 
             let last_progress = std::sync::Arc::new(std::sync::Mutex::new(-1.0));
             let handle_clone = handle.clone();
@@ -149,10 +152,18 @@ pub fn run() {
                 }
             });
 
+            let handle_for_engine = handle_for_menu.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = deps::check_and_download_deps(handle_for_menu).await {
                     eprintln!("Failed to setup dependencies: {}", e);
                 }
+            });
+
+            // yt-dlp is not shipped with the app: fetch it if it is missing, and
+            // check GitHub for a newer release on every launch. Runs on its own
+            // task so a slow or unreachable network never delays the window.
+            tauri::async_runtime::spawn(async move {
+                engine::ensure_engine(handle_for_engine).await;
             });
 
             // Handle initial launch arguments.
@@ -205,6 +216,8 @@ pub fn run() {
             commands::get_app_version,
             commands::cancel_download,
             commands::flush_pending_launch,
+            engine::get_engine_status,
+            engine::recheck_engine,
             notify::notify_ready,
             notify::notify_resize,
             notify::notify_open_location

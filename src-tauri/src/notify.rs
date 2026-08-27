@@ -38,6 +38,24 @@ pub struct NotifyPayload {
     pub path: Option<String>,
 }
 
+/// A progress tick for a card that is already on screen.
+///
+/// Deliberately a separate, smaller event from [`NotifyPayload`]: these arrive
+/// once per whole percent for the length of a download, and re-sending the title
+/// and kind with each one would be pure waste.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotifyProgress {
+    /// The download id, matching the card raised by [`notify`].
+    pub id: String,
+    /// 0-100, or `None` when yt-dlp reports an unknown percentage.
+    pub progress: Option<f64>,
+    /// yt-dlp's own speed string, e.g. "3.21MiB/s".
+    pub speed: Option<String>,
+    /// yt-dlp's own ETA string, e.g. "00:42".
+    pub eta: Option<String>,
+}
+
 /// Queues notifications raised before the notification webview has attached its
 /// listener.
 ///
@@ -115,6 +133,21 @@ pub fn notify<R: Runtime>(app: &AppHandle<R>, payload: NotifyPayload) {
 
     if let Ok(mut queue) = state.queue.lock() {
         queue.push(payload);
+    }
+}
+
+/// Push a progress tick to a card that is already on screen.
+///
+/// Unlike [`notify`], this never queues and never creates the window. A tick is
+/// only meaningful next to the card it belongs to, and that card was raised
+/// through `notify` - so if the webview is not listening yet, the right thing to
+/// do with a tick is drop it and send the next one.
+pub fn notify_progress<R: Runtime>(app: &AppHandle<R>, payload: NotifyProgress) {
+    let state = app.state::<NotifyState>();
+    let state: &NotifyState = state.inner();
+
+    if state.ready.load(Ordering::SeqCst) {
+        let _ = app.emit_to(LABEL, "notify-progress", payload);
     }
 }
 

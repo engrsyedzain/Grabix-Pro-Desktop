@@ -1,10 +1,10 @@
 # Grabix Pro
 
-**Download: <https://grabix-pro.vercel.app>**
+**Download: <https://syed-zain.com>**
 
 A desktop video downloader for Windows, built with Tauri 2, React 19 and Rust. It wraps `yt-dlp` and `ffmpeg` in a guided four-step interface, and ships with a companion browser extension that sends videos from your browser straight to the app.
 
-Website: <https://grabix-pro.vercel.app> · Repository: <https://github.com/engrsyedzain/Grabix-Pro-Desktop>
+Website: <https://syed-zain.com> · Repository: <https://github.com/engrsyedzain/Grabix-Pro-Desktop>
 
 ---
 
@@ -31,7 +31,7 @@ Website: <https://grabix-pro.vercel.app> · Repository: <https://github.com/engr
 - **Activity log** — a live side panel of analysis, progress and error lines.
 - **Desktop notifications** — a colour-coded card slides into the bottom-right corner when a download starts and again when it finishes or fails, whether or not the main window is open. Clicking the completion card reveals the file in Explorer. They are drawn in a dedicated always-on-top window rather than as native Windows toasts, which the OS styles and will not let an app colour; the trade-off is that they do not appear in the Action Center.
 - **Light and dark themes.**
-- **Bundled engine, self-updating** — `yt-dlp`, `ffmpeg` and `ffprobe` ship with the installer and are copied into the app data directory on first run. `yt-dlp` can be updated in place from the About tab, and a newer bundled copy upgrades an older installed one on launch (never downgrading a copy the in-app updater has pushed ahead).
+- **Always-current engine** — `yt-dlp` is never shipped frozen. The installer downloads the newest release from GitHub, and every launch checks for a newer one; when there is one, the app locks the interface behind a progress overlay while it downloads, then carries on. `ffmpeg` and `ffprobe` still ship as sidecars and are copied into the app data directory on first run.
 - **Durable settings** — `settings.json` is written atomically and every field carries a default, so a new setting or an interrupted write can't cost you your history. An unreadable file is backed up rather than overwritten.
 - **Single instance** — a second launch (for example from the extension) is routed into the running window.
 
@@ -61,9 +61,10 @@ src-tauri/
   src/lib.rs             Tauri setup, tray icon/menu, launch-argument and payload handling
   src/commands.rs        analyze_url, start_download, cancel/stop, settings, extension setup
   src/notify.rs          Bottom-right notification overlay window (position, sizing, queue)
-  src/deps.rs            Bundles/repairs yt-dlp, ffmpeg and ffprobe in the app data dir
+  src/deps.rs            Copies the ffmpeg/ffprobe sidecars into the app data dir
+  src/engine.rs          Downloads yt-dlp and keeps it current on every launch
   src/bin/native_host.rs Standalone Native Messaging bridge (grabix-native-host)
-  binaries/              yt-dlp, ffmpeg, ffprobe sidecars (Windows x86_64)
+  binaries/              ffmpeg, ffprobe sidecars (Windows x86_64)
 extension/               Manifest V3 extension (background, content script, popup)
 installer/               Inno Setup script + build script; setup.exe and the
                          packaged .zip/.xpi land here too (artifacts gitignored)
@@ -77,7 +78,7 @@ Progress and the final output path are read from `yt-dlp`'s documented `--progre
 
 ## Download
 
-Grab the installer from **<https://grabix-pro.vercel.app>**. It bundles `yt-dlp`, `ffmpeg` and `ffprobe`, plus the browser extension — including the signed Firefox add-on — so there is nothing else to download.
+Grab the installer from **<https://syed-zain.com>**. It bundles `ffmpeg` and `ffprobe`, plus the browser extension — including the signed Firefox add-on. `yt-dlp` is fetched from GitHub during setup so you start on the current release rather than whatever was current when the installer was built; if that download fails, the app retrieves it on first launch.
 
 If you want to build it yourself instead, see [Getting started](#getting-started) below.
 
@@ -106,7 +107,7 @@ Vite serves the frontend on `http://localhost:1420` and Tauri opens the desktop 
 npm run tauri build
 ```
 
-Binaries land in `src-tauri/target/release/`, alongside Tauri's own NSIS and MSI bundles. `yt-dlp`, `ffmpeg` and `ffprobe` are bundled as external sidecars, and `extension/` is bundled as a resource.
+Binaries land in `src-tauri/target/release/`, alongside Tauri's own NSIS and MSI bundles. `ffmpeg` and `ffprobe` are bundled as external sidecars and `extension/` as a resource; `yt-dlp` is downloaded at install time instead.
 
 Use `npm run tauri build` rather than `cargo build --release` — the latter produces a binary that loads the frontend from the dev server instead of embedding it, so the app opens a blank window.
 

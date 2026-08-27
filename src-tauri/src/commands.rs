@@ -438,9 +438,21 @@ pub fn check_path_exists(path: String) -> bool {
     std::path::Path::new(&clean_path).exists()
 }
 
+/// Message shown when something needs yt-dlp before it has finished arriving.
+///
+/// The engine is downloaded rather than shipped (see engine.rs), so on a fresh
+/// install there is a window - usually seconds - where it genuinely is not there
+/// yet. Saying so beats letting the OS answer with "the system cannot find the
+/// file specified", which reads like a broken install.
+const ENGINE_MISSING: &str =
+    "The download engine is still being set up. Open Grabix Pro, wait for setup to finish, then try again.";
+
 #[tauri::command]
 pub async fn analyze_url(app_handle: AppHandle, url: String) -> Result<serde_json::Value, String> {
     let ytdlp_path = get_ytdlp_path(&app_handle);
+    if !ytdlp_path.exists() {
+        return Err(ENGINE_MISSING.to_string());
+    }
     let settings = load_settings(app_handle.clone()).unwrap_or_default();
 
     let mut cmd = Command::new(ytdlp_path);
@@ -598,6 +610,9 @@ pub async fn start_download(
     // would mean a start card with no matching finish card.
     let notifications_on = prefs.desktop_notifications;
     let ytdlp_path = get_ytdlp_path(&app_handle);
+    if !ytdlp_path.exists() {
+        return Err(ENGINE_MISSING.to_string());
+    }
     let ffmpeg_path = get_ffmpeg_path(&app_handle);
     let ffmpeg_dir = ffmpeg_path
         .parent()
@@ -773,7 +788,12 @@ pub async fn start_download(
     });
 
     let app_handle_stdout = app_handle.clone();
+    let id_inner = id.clone();
     tokio::spawn(async move {
+        // Whole percent last pushed to the notification card. yt-dlp reports many
+        // times per second; the card only ever shows an integer, so anything
+        // finer is an emit the user cannot see.
+        let mut last_card_percent: i64 = -1;
         let mut reader = BufReader::new(stdout).lines();
         while let Ok(Some(line)) = reader.next_line().await {
             // --- authoritative, template-driven output ---------------------
@@ -798,6 +818,25 @@ pub async fn start_download(
                 let eta = f.next().map(str::trim).filter(|s| !s.starts_with("Unknown")).map(str::to_string);
 
                 let p_val = { shared_path_clone.lock().unwrap().clone() };
+
+                // Keep the bottom-right card in step with the download it
+                // announced, so a download started from the extension while the
+                // main window is hidden still shows where it has got to.
+                if notifications_on {
+                    let percent = progress.map(|p| p.floor() as i64).unwrap_or(-1);
+                    if percent != last_card_percent {
+                        last_card_percent = percent;
+                        crate::notify::notify_progress(
+                            &app_handle_stdout,
+                            crate::notify::NotifyProgress {
+                                id: id_inner.clone(),
+                                progress,
+                                speed: speed.clone(),
+                                eta: eta.clone(),
+                            },
+                        );
+                    }
+                }
 
                 let _ = app_handle_stdout.emit("download-progress", DownloadProgress {
                     status: "downloading".to_string(),

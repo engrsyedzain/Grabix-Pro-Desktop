@@ -15,6 +15,7 @@ import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import DownloadedVideos from './components/DownloadedVideos';
+import EngineGate from './components/EngineGate';
 import { VideoInfo, DownloadProgress, Settings, LiveProgress, HistoryEntry } from './types';
 
 const STEPS = [
@@ -1242,6 +1243,11 @@ function App() {
           savePath={savePath}
           onSelectPath={handleSelectPath}
         />
+
+        {/* Covers everything above while yt-dlp is being fetched or updated.
+            Last child so it paints over the modal too - an engine that isn't
+            there yet makes every control behind it a dead end. */}
+        <EngineGate />
       </div>
     </ThemeProvider>
   );

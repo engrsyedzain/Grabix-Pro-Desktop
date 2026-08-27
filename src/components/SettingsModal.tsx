@@ -22,8 +22,9 @@ import {
   Bell,
 } from "lucide-react";
 
-const CONTACT_EMAIL = "engr.syedzain@gmail.com";
+const CONTACT_EMAIL = "me@syed-zain.com";
 const CONTACT_WHATSAPP = "+923002652848";
+const WEBSITE_URL = "https://syed-zain.com";
 // wa.me wants the number without '+' or separators.
 const WHATSAPP_URL = `https://wa.me/${CONTACT_WHATSAPP.replace(/\D/g, "")}`;
 const MAILTO_URL = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Grabix Pro — Support")}`;
@@ -246,8 +247,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="flex-1 space-y-1">
                       <h4 className="text-sm font-bold">yt-dlp Engine</h4>
                       <p className="text-[11px] text-grabix-muted leading-relaxed">
-                        Sites change often. Update the engine to pull the latest
-                        extractor fixes without reinstalling Grabix Pro.
+                        Sites change often, so Grabix Pro checks for a newer
+                        engine every time it starts and installs one when it
+                        finds it. Use this to pull a fix in mid-session.
                       </p>
                     </div>
                     <button
@@ -729,6 +731,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <button
+                    onClick={() => openUrl(WEBSITE_URL)}
+                    className="group flex items-center gap-3 p-3 rounded-2xl bg-grabix-surface dark:bg-grabix-input-dark border border-grabix-border dark:border-grabix-border-dark hover:border-grabix-purple transition-all text-left active:scale-[0.98] sm:col-span-2"
+                  >
+                    <div className="p-2 rounded-lg bg-grabix-purple/10 text-grabix-purple shrink-0">
+                      <Globe size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[9px] font-bold text-grabix-muted uppercase tracking-wider">
+                        Website
+                      </div>
+                      <div className="text-[11px] font-medium truncate text-black dark:text-white group-hover:text-grabix-purple transition-colors">
+                        syed-zain.com
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
                     onClick={() => openUrl(MAILTO_URL)}
                     className="group flex items-center gap-3 p-3 rounded-2xl bg-grabix-surface dark:bg-grabix-input-dark border border-grabix-border dark:border-grabix-border-dark hover:border-grabix-purple transition-all text-left active:scale-[0.98]"
                   >
@@ -768,7 +787,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="text-[10px] font-bold text-grabix-dim uppercase tracking-tighter">
                   Developed by
                 </p>
-                <p className="text-lg font-black text-grabix-purple">ZAIN</p>
+                <p className="text-lg font-black text-grabix-purple">SYED ZAIN</p>
+                <button
+                  onClick={() => openUrl(WEBSITE_URL)}
+                  className="text-[10px] font-bold text-grabix-muted hover:text-grabix-purple transition-colors"
+                >
+                  syed-zain.com
+                </button>
                 <p className="text-[10px] text-grabix-muted mt-2">
                   © 2025 All Rights Reserved
                 </p>

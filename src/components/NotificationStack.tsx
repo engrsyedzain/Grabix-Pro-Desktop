@@ -12,6 +12,21 @@ interface NotifyPayload {
   path?: string | null;
 }
 
+/** Mirrors `NotifyProgress` in src-tauri/src/notify.rs. */
+interface NotifyProgressPayload {
+  id: string;
+  progress?: number | null;
+  speed?: string | null;
+  eta?: string | null;
+}
+
+/** A card plus whatever progress has arrived for it since. */
+type NotifyItem = NotifyPayload & {
+  progress?: number | null;
+  speed?: string | null;
+  eta?: string | null;
+};
+
 /** How long each kind stays on screen. "started" is informational, so it goes
  *  quickly; the other two are outcomes worth reading, and "finished" is also a
  *  button, so it needs long enough to be clicked. */
@@ -20,6 +35,14 @@ const DISMISS_MS: Record<NotifyKind, number> = {
   finished: 9000,
   error: 9000,
 };
+
+/** Keeps a downloading card alive between progress ticks.
+ *
+ *  A "started" card would otherwise vanish after 5s and leave the rest of a long
+ *  download unreported. Rather than making it permanent - which would strand a
+ *  card forever if yt-dlp died without a finish or error event - each tick
+ *  refreshes this window, so the card outlives the download and no more. */
+const PROGRESS_KEEPALIVE_MS = 20000;
 
 const STYLES: Record<
   NotifyKind,
@@ -46,7 +69,7 @@ const STYLES: Record<
 };
 
 export default function NotificationStack() {
-  const [items, setItems] = useState<NotifyPayload[]>([]);
+  const [items, setItems] = useState<NotifyItem[]>([]);
   const wrapper = useRef<HTMLDivElement>(null);
   const timers = useRef<Record<string, number>>({});
 
@@ -79,11 +102,40 @@ export default function NotificationStack() {
         );
       });
 
+      const stopProgress = await listen<NotifyProgressPayload>('notify-progress', event => {
+        const tick = event.payload;
+
+        setItems(prev => {
+          // Ticks are fire-and-forget on the Rust side, so one can arrive for a
+          // card that has already been dismissed or replaced by its outcome.
+          // Merging only into a live "started" card keeps those from resurrecting
+          // a finished download as a downloading one.
+          const target = prev.find(i => i.id === tick.id);
+          if (!target || target.kind !== 'started') return prev;
+
+          return prev.map(i =>
+            i.id === tick.id
+              ? { ...i, progress: tick.progress, speed: tick.speed, eta: tick.eta }
+              : i,
+          );
+        });
+
+        window.clearTimeout(timers.current[tick.id]);
+        timers.current[tick.id] = window.setTimeout(
+          () => dismiss(tick.id),
+          PROGRESS_KEEPALIVE_MS,
+        );
+      });
+
       if (cancelled) {
         stop();
+        stopProgress();
         return;
       }
-      unlisten = stop;
+      unlisten = () => {
+        stop();
+        stopProgress();
+      };
 
       // Only now is it safe for Rust to emit. Anything raised before this point
       // is queued on the Rust side and flushed by this call.
@@ -117,7 +169,7 @@ export default function NotificationStack() {
     return () => observer.disconnect();
   }, [items]);
 
-  const open = (item: NotifyPayload) => {
+  const open = (item: NotifyItem) => {
     if (item.kind !== 'finished' || !item.path) return;
     invoke('notify_open_location', { path: item.path }).catch(() => {});
     dismiss(item.id);
@@ -145,7 +197,11 @@ export default function NotificationStack() {
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold tracking-wide text-white">{style.label}</p>
+                <p className="text-xs font-bold tracking-wide text-white">
+                  {item.kind === 'started' && typeof item.progress === 'number'
+                    ? 'Downloading'
+                    : style.label}
+                </p>
                 {/* Titles are arbitrary video names: clamp instead of letting one
                     long title grow the window to full screen height. */}
                 <p className="mt-0.5 line-clamp-2 break-words text-[11px] leading-relaxed text-white/80">
@@ -171,9 +227,34 @@ export default function NotificationStack() {
             </div>
 
             {item.kind === 'started' && (
-              <div className="mt-3 h-1 overflow-hidden rounded-full bg-black/20">
-                <div className="h-full w-1/3 animate-progress-indeterminate rounded-full bg-white/70" />
-              </div>
+              <>
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-black/20">
+                  {/* Indeterminate until the first tick arrives: yt-dlp can spend
+                      several seconds resolving formats before it reports any
+                      percentage, and a bar pinned at 0% reads as "stuck". */}
+                  {typeof item.progress === 'number' ? (
+                    <div
+                      className="h-full rounded-full bg-white/90 transition-all duration-200"
+                      style={{ width: `${Math.min(100, Math.max(0, item.progress))}%` }}
+                    />
+                  ) : (
+                    <div className="h-full w-1/3 animate-progress-indeterminate rounded-full bg-white/70" />
+                  )}
+                </div>
+
+                <div className="mt-1.5 flex items-center justify-between gap-3 text-[10px] font-semibold tabular-nums text-white/75">
+                  <span>
+                    {typeof item.progress === 'number'
+                      ? `${item.progress.toFixed(1)}%`
+                      : 'Starting...'}
+                  </span>
+                  <span className="truncate">
+                    {[item.speed, item.eta && `ETA ${item.eta}`]
+                      .filter(Boolean)
+                      .join('  ')}
+                  </span>
+                </div>
+              </>
             )}
           </div>
         );
